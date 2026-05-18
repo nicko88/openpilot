@@ -627,6 +627,51 @@
               ]
             },
             {
+              "key": "AccelControllerEnabled",
+              "widget": "toggle",
+              "title": "Acceleration Controller",
+              "description": "",
+              "enablement": [
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ]
+            },
+            {
+              "key": "AccelPersonality",
+              "widget": "multiple_button",
+              "title": "Acceleration Personality",
+              "description": "",
+              "options": [
+                {
+                  "value": 0,
+                  "label": "ECO"
+                },
+                {
+                  "value": 1,
+                  "label": "NORMAL"
+                },
+                {
+                  "value": 2,
+                  "label": "SPORT"
+                }
+              ],
+              "enablement": [
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                },
+                {
+                  "type": "param",
+                  "key": "AccelControllerEnabled",
+                  "equals": true
+                }
+              ]
+            },
+            {
               "key": "IntelligentCruiseButtonManagement",
               "widget": "toggle",
               "title": "Intelligent Cruise Button Management (ICBM) (Alpha)",
@@ -2205,6 +2250,54 @@
               "type": "param",
               "key": "ToyotaEnforceStockLongitudinal",
               "equals": false
+            }
+          ]
+        },
+        {
+          "key": "ToyotaTSS2Long",
+          "widget": "toggle",
+          "needs_onroad_cycle": true,
+          "title": "Toyota: Custom Longitudinal for TSS2",
+          "description": "",
+          "enablement": [
+            {
+              "type": "not_engaged"
+            }
+          ]
+        },
+        {
+          "key": "ToyotaEnhancedBsm",
+          "widget": "toggle",
+          "needs_onroad_cycle": true,
+          "title": "Toyota: Prius TSS2 BSM and some TSSP",
+          "description": "",
+          "enablement": [
+            {
+              "type": "not_engaged"
+            }
+          ]
+        },
+        {
+          "key": "ToyotaAutoHold",
+          "widget": "toggle",
+          "needs_onroad_cycle": true,
+          "title": "Toyota: Auto Brake Hold (TSS2 Hybrid Cars)",
+          "description": "",
+          "enablement": [
+            {
+              "type": "not_engaged"
+            }
+          ]
+        },
+        {
+          "key": "ToyotaDriveMode",
+          "widget": "toggle",
+          "needs_onroad_cycle": true,
+          "title": "Toyota: Drive Mode Button Link",
+          "description": "",
+          "enablement": [
+            {
+              "type": "not_engaged"
             }
           ]
         }

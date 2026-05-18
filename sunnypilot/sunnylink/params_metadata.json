@@ -308,6 +308,10 @@
     "title": "Dynamic Experimental Control",
     "description": ""
   },
+  "DynamicFollow": {
+    "title": "Dynamic Follow Distance",
+    "description": "Enable dynamic following distance that adjusts based on speed and driving personality. Uses speed-adaptive smoothing for comfortable transitions."
+  },
   "EnableCopyparty": {
     "title": "copyparty Service",
     "description": ""
