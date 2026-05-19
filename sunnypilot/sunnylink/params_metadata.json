@@ -1128,6 +1128,10 @@
     "title": "Quiet Mode",
     "description": ""
   },
+  "RadarDistance": {
+    "title": "Radar Distance Anticipator",
+    "description": "Use radar's secondary lead detection to anticipate distant traffic and lift gas / apply gentle brake earlier than the MPC would on its own. Goal: earlier, smoother decel; no late hard braking."
+  },
   "RainbowMode": {
     "title": "Rainbow Mode",
     "description": ""

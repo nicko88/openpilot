@@ -19,7 +19,8 @@ from openpilot.sunnypilot.models.helpers import get_active_bundle
 
 from openpilot.sunnypilot.selfdrive.controls.lib.accel_personality.accel_controller import AccelPersonalityController
 from openpilot.sunnypilot.selfdrive.controls.lib.dynamic_personality.dynamic_follow import FollowDistanceController
-from opendbc.car.interfaces import ACCEL_MIN
+from openpilot.sunnypilot.selfdrive.controls.lib.radar_distance.radar_distance import RadarDistanceController
+from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
 
 DecState = custom.LongitudinalPlanSP.DynamicExperimentalControl.DynamicExperimentalControlState
 LongitudinalPlanSource = custom.LongitudinalPlanSP.LongitudinalPlanSource
@@ -32,6 +33,8 @@ class LongitudinalPlannerSP:
     self.dec = DynamicExperimentalController(CP, mpc)
     self.accel_controller = AccelPersonalityController()
     self.dynamic_follow = FollowDistanceController()
+    self.radar_distance = RadarDistanceController()
+    self.sm_sp = messaging.SubMaster(['liveTracks'])
     self.scc = SmartCruiseControl()
     self.resolver = SpeedLimitResolver()
     self.sla = SpeedLimitAssist(CP, CP_SP)
@@ -50,9 +53,26 @@ class LongitudinalPlannerSP:
     return experimental_mode and self.dec.mode() == "blended"
 
   def get_accel_clip(self, v_ego: float) -> list[float] | None:
-    if self.accel_controller.is_enabled():
-      return [ACCEL_MIN, self.accel_controller.get_max_accel(v_ego)]
-    return None
+    accel_on = self.accel_controller.is_enabled()
+    radar_on = self.radar_distance.is_enabled()
+
+    if not accel_on and not radar_on:
+      return None
+
+    if accel_on:
+      a_min = self.accel_controller.get_min_accel(v_ego)
+      a_max = self.accel_controller.get_max_accel(v_ego)
+    else:
+      a_min, a_max = ACCEL_MIN, ACCEL_MAX
+
+    if radar_on:
+      ceiling = self.radar_distance.get_accel_ceiling(v_ego)
+      if ceiling is not None:
+        a_max = min(a_max, ceiling)
+        if a_max < a_min:
+          a_min = a_max
+
+    return [a_min, a_max]
 
   def get_cruise_min_accel(self, v_ego: float) -> float | None:
     if self.accel_controller.is_enabled():
@@ -98,8 +118,10 @@ class LongitudinalPlannerSP:
     self.events_sp.clear()
     self.dec.update(sm)
     self.e2e_alerts_helper.update(sm, self.events_sp)
+    self.sm_sp.update(0)
     self.accel_controller.update(sm)
     self.dynamic_follow.update()
+    self.radar_distance.update(sm, self.sm_sp)
 
   def publish_longitudinal_plan_sp(self, sm: messaging.SubMaster, pm: messaging.PubMaster) -> None:
     plan_sp_send = messaging.new_message('longitudinalPlanSP')
