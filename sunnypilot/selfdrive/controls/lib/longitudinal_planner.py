@@ -20,7 +20,7 @@ from openpilot.sunnypilot.models.helpers import get_active_bundle
 from openpilot.sunnypilot.selfdrive.controls.lib.accel_personality.accel_controller import AccelPersonalityController
 from openpilot.sunnypilot.selfdrive.controls.lib.dynamic_personality.dynamic_follow import FollowDistanceController
 from openpilot.sunnypilot.selfdrive.controls.lib.radar_distance.radar_distance import RadarDistanceController
-from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
+from opendbc.car.interfaces import ACCEL_MIN
 
 DecState = custom.LongitudinalPlanSP.DynamicExperimentalControl.DynamicExperimentalControlState
 LongitudinalPlanSource = custom.LongitudinalPlanSP.LongitudinalPlanSource
@@ -53,26 +53,19 @@ class LongitudinalPlannerSP:
     return experimental_mode and self.dec.mode() == "blended"
 
   def get_accel_clip(self, v_ego: float) -> list[float] | None:
-    accel_on = self.accel_controller.is_enabled()
-    radar_on = self.radar_distance.is_enabled()
-
-    if not accel_on and not radar_on:
+    if not self.accel_controller.is_enabled():
       return None
 
-    if accel_on:
-      a_min = self.accel_controller.get_min_accel(v_ego)
-      a_max = self.accel_controller.get_max_accel(v_ego)
-    else:
-      a_min, a_max = ACCEL_MIN, ACCEL_MAX
+    a_max = self.accel_controller.get_max_accel(v_ego)
 
-    if radar_on:
+    ceiling = None
+    if self.radar_distance.is_enabled():
       ceiling = self.radar_distance.get_accel_ceiling(v_ego)
-      if ceiling is not None:
-        a_max = min(a_max, ceiling)
-        if a_max < a_min:
-          a_min = a_max
 
-    return [a_min, a_max]
+    if ceiling is not None:
+      a_max = min(a_max, ceiling)
+
+    return [ACCEL_MIN, max(ACCEL_MIN, a_max)]
 
   def get_cruise_min_accel(self, v_ego: float) -> float | None:
     if self.accel_controller.is_enabled():
