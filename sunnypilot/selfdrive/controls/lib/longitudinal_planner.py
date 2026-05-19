@@ -68,6 +68,10 @@ class LongitudinalPlannerSP:
     return [ACCEL_MIN, max(ACCEL_MIN, a_max)]
 
   def get_cruise_min_accel(self, v_ego: float) -> float | None:
+    # Skip AccelPersonality decel floor when DEC is in blended mode so the
+    # e2e/MPC stack has full brake authority for model-driven stops.
+    if self.dec.mode() == 'blended':
+      return None
     if self.accel_controller.is_enabled():
       return self.accel_controller.get_min_accel(v_ego)
     return None
