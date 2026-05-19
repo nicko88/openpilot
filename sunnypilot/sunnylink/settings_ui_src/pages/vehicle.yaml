@@ -79,3 +79,31 @@ sections:
     - type: param
       key: ToyotaEnforceStockLongitudinal
       equals: false
+  - key: ToyotaTSS2Long
+    widget: toggle
+    needs_onroad_cycle: true
+    title: 'Toyota: Custom Longitudinal for TSS2'
+    description: ''
+    enablement:
+    - $ref: '#/macros/not_engaged'
+  - key: ToyotaEnhancedBsm
+    widget: toggle
+    needs_onroad_cycle: true
+    title: 'Toyota: Prius TSS2 BSM and some TSSP'
+    description: ''
+    enablement:
+    - $ref: '#/macros/not_engaged'
+  - key: ToyotaAutoHold
+    widget: toggle
+    needs_onroad_cycle: true
+    title: 'Toyota: Auto Brake Hold (TSS2 Hybrid Cars)'
+    description: ''
+    enablement:
+    - $ref: '#/macros/not_engaged'
+  - key: ToyotaDriveMode
+    widget: toggle
+    needs_onroad_cycle: true
+    title: 'Toyota: Drive Mode Button Link'
+    description: ''
+    enablement:
+    - $ref: '#/macros/not_engaged'
