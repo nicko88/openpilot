@@ -23,9 +23,12 @@ _VREL_FULL = -6.0
 
 _V_EGO_MIN = 5.0
 
-_ACTIVATE_FRAMES = 5
+_ACTIVATE_FRAMES = 3
 _DECAY_PER_MISS = 2
 _DEACTIVATE_FRAMES = 10
+
+_BIN_DREL = 8.0
+_BIN_VREL = 2.0
 
 _TTC_NONE = 10.0
 _TTC_LIFT = 5.0
@@ -61,7 +64,7 @@ class RadarDistanceController:
     self._enabled = self.params.get_bool('RadarDistance')
 
     self._state = FarLeadState()
-    self._track_persistence: dict[int, int] = {}
+    self._track_persistence: dict[tuple[int, int], int] = {}
 
     self._ceiling = _A_CEIL_RELEASED
     self._first = True
@@ -99,7 +102,8 @@ class RadarDistanceController:
     except Exception:
       v_ego = 0.0
 
-    if radarstate is not None and radarstate.leadOne.status:
+    if radarstate is not None and radarstate.leadOne.status \
+        and float(radarstate.leadOne.vRel) <= _VREL_DEADBAND:
       self._release()
       return
 
@@ -154,13 +158,17 @@ class RadarDistanceController:
     except Exception:
       return []
 
+  @staticmethod
+  def _bin(d_rel: float, v_rel: float) -> tuple[int, int]:
+    return int(d_rel // _BIN_DREL), int(v_rel // _BIN_VREL)
+
   def _tick_radar(self, tracks, v_ego: float) -> None:
     if v_ego < _V_EGO_MIN or not tracks:
-      self._decay_unseen(seen_ids=set())
+      self._decay_unseen(seen_keys=set())
       self._lose_track()
       return
 
-    seen_ids: set[int] = set()
+    seen_keys: set[tuple[int, int]] = set()
     best: tuple[float, float, float, float, int] | None = None
 
     for t in tracks:
@@ -176,16 +184,16 @@ class RadarDistanceController:
       if v_rel >= _VREL_DEADBAND:
         continue
 
-      tid = int(t.trackId)
-      seen_ids.add(tid)
-      self._track_persistence[tid] = self._track_persistence.get(tid, 0) + 1
+      key = self._bin(d_rel, v_rel)
+      seen_keys.add(key)
+      self._track_persistence[key] = self._track_persistence.get(key, 0) + 1
 
-      if self._track_persistence[tid] >= _ACTIVATE_FRAMES:
+      if self._track_persistence[key] >= _ACTIVATE_FRAMES:
         ttc = d_rel / max(0.1, -v_rel)
         if best is None or ttc < best[0]:
-          best = (ttc, d_rel, v_rel, y_rel, tid)
+          best = (ttc, d_rel, v_rel, y_rel, int(t.trackId))
 
-    self._decay_unseen(seen_ids)
+    self._decay_unseen(seen_keys)
 
     if best is None:
       self._lose_track()
@@ -196,17 +204,17 @@ class RadarDistanceController:
     self._state.v_rel = best[2]
     self._state.y_rel = best[3]
     self._state.track_id = best[4]
-    self._state.frames_seen = self._track_persistence[best[4]]
+    self._state.frames_seen = self._track_persistence[self._bin(best[1], best[2])]
     self._state.frames_lost = 0
     self._state.active = True
 
-  def _decay_unseen(self, seen_ids: set[int]) -> None:
-    for tid in list(self._track_persistence.keys()):
-      if tid in seen_ids:
+  def _decay_unseen(self, seen_keys: set[tuple[int, int]]) -> None:
+    for key in list(self._track_persistence.keys()):
+      if key in seen_keys:
         continue
-      self._track_persistence[tid] -= _DECAY_PER_MISS
-      if self._track_persistence[tid] <= 0:
-        del self._track_persistence[tid]
+      self._track_persistence[key] -= _DECAY_PER_MISS
+      if self._track_persistence[key] <= 0:
+        del self._track_persistence[key]
 
   def _lose_track(self) -> None:
     self._state.frames_seen = 0

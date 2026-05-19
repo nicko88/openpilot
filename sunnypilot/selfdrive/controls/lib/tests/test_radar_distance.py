@@ -29,13 +29,15 @@ class FakeTracks:
 
 
 class FakeLead:
-  def __init__(self, status=False):
+  def __init__(self, status=False, v_rel=0.0, d_rel=0.0):
     self.status = status
+    self.vRel = v_rel
+    self.dRel = d_rel
 
 
 class FakeRadarState:
-  def __init__(self, lead_status=False):
-    self.leadOne = FakeLead(lead_status)
+  def __init__(self, lead_status=False, lead_vrel=-3.0):
+    self.leadOne = FakeLead(lead_status, v_rel=lead_vrel)
     self.leadTwo = FakeLead(False)
 
 
