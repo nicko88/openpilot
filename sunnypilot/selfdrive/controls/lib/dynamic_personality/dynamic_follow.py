@@ -86,7 +86,7 @@ class ModifierDeltas:
 
   @property
   def total(self) -> float:
-    return self.jerk + self.cutin + max(self.alead, self.closing) + self.atau + self.flicker
+    return self.jerk + max(self.cutin, self.flicker) + max(self.alead, self.closing) + self.atau
 
 
 class FollowDistanceController:
