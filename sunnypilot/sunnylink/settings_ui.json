@@ -520,12 +520,6 @@
               ]
             },
             {
-              "key": "RoadEdgeLaneChangeEnabled",
-              "widget": "toggle",
-              "title": "Block Lane Change: Road Edge Detection",
-              "description": "Blocks lane change when the model sees a road edge on the side you signal."
-            },
-            {
               "key": "AutoLaneChangeBsmDelay",
               "widget": "toggle",
               "title": "Auto Lane Change: Delay with Blind Spot",
@@ -594,6 +588,26 @@
               ]
             },
             {
+              "key": "RadarDistance",
+              "widget": "toggle",
+              "title": "Radar Distance Anticipator",
+              "description": "Use the secondary radar lead to anticipate distant traffic and lift gas / apply gentle brake earlier than the MPC would on its own. Also smooths brief radar lead drop-outs so the MPC does not build panic brake on flicker. Aims for earlier, smoother decel with no late hard braking.",
+              "visibility": [
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ],
+              "enablement": [
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ]
+            },
+            {
               "key": "DisengageOnAccelerator",
               "widget": "toggle",
               "title": "Disengage Cruise on Accelerator Pedal",
@@ -622,51 +636,6 @@
                 {
                   "type": "capability",
                   "field": "has_longitudinal_control",
-                  "equals": true
-                }
-              ]
-            },
-            {
-              "key": "AccelControllerEnabled",
-              "widget": "toggle",
-              "title": "Acceleration Controller",
-              "description": "",
-              "enablement": [
-                {
-                  "type": "capability",
-                  "field": "has_longitudinal_control",
-                  "equals": true
-                }
-              ]
-            },
-            {
-              "key": "AccelPersonality",
-              "widget": "multiple_button",
-              "title": "Acceleration Personality",
-              "description": "",
-              "options": [
-                {
-                  "value": 0,
-                  "label": "ECO"
-                },
-                {
-                  "value": 1,
-                  "label": "NORMAL"
-                },
-                {
-                  "value": 2,
-                  "label": "SPORT"
-                }
-              ],
-              "enablement": [
-                {
-                  "type": "capability",
-                  "field": "has_longitudinal_control",
-                  "equals": true
-                },
-                {
-                  "type": "param",
-                  "key": "AccelControllerEnabled",
                   "equals": true
                 }
               ]
@@ -2250,54 +2219,6 @@
               "type": "param",
               "key": "ToyotaEnforceStockLongitudinal",
               "equals": false
-            }
-          ]
-        },
-        {
-          "key": "ToyotaTSS2Long",
-          "widget": "toggle",
-          "needs_onroad_cycle": true,
-          "title": "Toyota: Custom Longitudinal for TSS2",
-          "description": "",
-          "enablement": [
-            {
-              "type": "not_engaged"
-            }
-          ]
-        },
-        {
-          "key": "ToyotaEnhancedBsm",
-          "widget": "toggle",
-          "needs_onroad_cycle": true,
-          "title": "Toyota: Prius TSS2 BSM and some TSSP",
-          "description": "",
-          "enablement": [
-            {
-              "type": "not_engaged"
-            }
-          ]
-        },
-        {
-          "key": "ToyotaAutoHold",
-          "widget": "toggle",
-          "needs_onroad_cycle": true,
-          "title": "Toyota: Auto Brake Hold (TSS2 Hybrid Cars)",
-          "description": "",
-          "enablement": [
-            {
-              "type": "not_engaged"
-            }
-          ]
-        },
-        {
-          "key": "ToyotaDriveMode",
-          "widget": "toggle",
-          "needs_onroad_cycle": true,
-          "title": "Toyota: Drive Mode Button Link",
-          "description": "",
-          "enablement": [
-            {
-              "type": "not_engaged"
             }
           ]
         }

@@ -24,6 +24,16 @@ sections:
     - $ref: '#/macros/longitudinal'
     enablement:
     - $ref: '#/macros/longitudinal'
+  - key: RadarDistance
+    widget: toggle
+    title: Radar Distance Anticipator
+    description: Use the secondary radar lead to anticipate distant traffic and lift gas / apply gentle brake earlier than
+      the MPC would on its own. Also smooths brief radar lead drop-outs so the MPC does not build panic brake on flicker.
+      Aims for earlier, smoother decel with no late hard braking.
+    visibility:
+    - $ref: '#/macros/longitudinal'
+    enablement:
+    - $ref: '#/macros/longitudinal'
   - key: DisengageOnAccelerator
     widget: toggle
     title: Disengage Cruise on Accelerator Pedal
@@ -43,6 +53,43 @@ sections:
       label: Relaxed
     enablement:
     - $ref: '#/macros/longitudinal'
+  - key: DynamicFollow
+    widget: toggle
+    title: Dynamic Follow Distance
+    description: Adjust follow distance dynamically based on speed and lead state. Combines the selected driving personality
+      with real-time modifiers (jerk, cut-in, closing velocity, lead deceleration, radar flicker).
+    visibility:
+    - $ref: '#/macros/longitudinal'
+    enablement:
+    - $ref: '#/macros/longitudinal'
+  - key: AccelPersonalityEnabled
+    widget: toggle
+    title: Acceleration Personality
+    description: Enable per-personality acceleration profiles. Sport allows stronger acceleration; Eco is gentler.
+    visibility:
+    - $ref: '#/macros/longitudinal'
+    enablement:
+    - $ref: '#/macros/longitudinal'
+  - key: AccelPersonality
+    widget: multiple_button
+    title: Acceleration Profile
+    description: Sport allows the most aggressive acceleration; Eco the gentlest. Normal sits between.
+    options:
+    - value: 0
+      label: Sport
+    - value: 1
+      label: Normal
+    - value: 2
+      label: Eco
+    visibility:
+    - type: param
+      key: AccelPersonalityEnabled
+      equals: true
+    enablement:
+    - $ref: '#/macros/longitudinal'
+    - type: param
+      key: AccelPersonalityEnabled
+      equals: true
   - key: IntelligentCruiseButtonManagement
     widget: toggle
     title: Intelligent Cruise Button Management (ICBM) (Alpha)

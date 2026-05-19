@@ -107,6 +107,9 @@ class LongitudinalPlannerSP:
     self.output_v_target, self.output_a_target = targets[self.source]
     return self.output_v_target, self.output_a_target
 
+  def smooth_radarstate(self, radarstate):
+    return self.radar_distance.smooth_radarstate(radarstate)
+
   def update(self, sm: messaging.SubMaster) -> None:
     self.events_sp.clear()
     self.dec.update(sm)

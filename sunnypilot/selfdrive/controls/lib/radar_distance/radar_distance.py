@@ -11,6 +11,7 @@ import numpy as np
 
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_MDL
+from openpilot.sunnypilot.selfdrive.controls.lib.lead_persistence.lead_persistence import LeadPersistence
 
 
 _DREL_MIN = 40.0
@@ -65,6 +66,8 @@ class RadarDistanceController:
     self._ceiling = _A_CEIL_RELEASED
     self._first = True
 
+    self._lead_persistence = LeadPersistence()
+
   def is_enabled(self) -> bool:
     return self._enabled
 
@@ -81,6 +84,12 @@ class RadarDistanceController:
     if self._frame % _PARAM_REFRESH_FRAMES == 0:
       self._enabled = self.params.get_bool('RadarDistance')
 
+    radarstate = None
+    if sm is not None:
+      radarstate = sm['radarState'] if 'radarState' in sm.data else None
+
+    self._lead_persistence.update(radarstate, force_enabled=self._enabled)
+
     if sm is None or not self._enabled:
       self._release()
       return
@@ -90,7 +99,6 @@ class RadarDistanceController:
     except Exception:
       v_ego = 0.0
 
-    radarstate = sm['radarState'] if 'radarState' in sm.data else None
     if radarstate is not None and radarstate.leadOne.status:
       self._release()
       return
@@ -98,6 +106,11 @@ class RadarDistanceController:
     tracks = self._extract_tracks(sm_sp)
     self._tick_radar(tracks, v_ego)
     self._step_ceiling()
+
+  def smooth_radarstate(self, radarstate):
+    if not self._enabled:
+      return radarstate
+    return self._lead_persistence.smooth(radarstate, force_enabled=True)
 
   def reset(self) -> None:
     self._state = FarLeadState()
