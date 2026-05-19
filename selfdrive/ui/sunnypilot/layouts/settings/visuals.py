@@ -17,6 +17,13 @@ CHEVRON_INFO_DESCRIPTION = {
   "disabled": tr_noop("This feature requires sunnypilot longitudinal control to be available.")
 }
 
+LEAD_CAR_INDICATOR_DESCRIPTION = {
+  "enabled": tr_noop("Replaces the lead chevron with a car silhouette and distance readout. " +
+                     "Color reflects the model's confidence in the lead (green = high, amber = medium, red = low). " +
+                     "Requires sunnypilot longitudinal control."),
+  "disabled": tr_noop("This feature requires sunnypilot longitudinal control to be available.")
+}
+
 
 class VisualsLayout(Widget):
   def __init__(self):
@@ -112,6 +119,13 @@ class VisualsLayout(Widget):
       param="ChevronInfo",
       inline=False
     )
+    self._lead_car_indicator = toggle_item_sp(
+      title=lambda: tr("Car Icon Lead Indicator"),
+      description=tr(LEAD_CAR_INDICATOR_DESCRIPTION["enabled"]),
+      param="LeadCarIndicator",
+      initial_state=ui_state.params.get_bool("LeadCarIndicator"),
+      callback=None,
+    )
     self._dev_ui_info = multiple_button_item_sp(
       title=lambda: tr("Developer UI"),
       description=lambda: tr("Display real-time parameters and metrics from various sources."),
@@ -123,6 +137,7 @@ class VisualsLayout(Widget):
 
     items = list(self._toggles.values()) + [
       self._chevron_info,
+      self._lead_car_indicator,
       self._dev_ui_info,
     ]
     return items
@@ -139,10 +154,16 @@ class VisualsLayout(Widget):
       self._chevron_info.set_description(tr(CHEVRON_INFO_DESCRIPTION["enabled"]))
       self._chevron_info.action_item.set_selected_button(ui_state.params.get("ChevronInfo", return_default=True))
       self._chevron_info.action_item.set_enabled(True)
+      self._lead_car_indicator.set_description(tr(LEAD_CAR_INDICATOR_DESCRIPTION["enabled"]))
+      self._lead_car_indicator.action_item.set_state(self._params.get_bool("LeadCarIndicator"))
+      self._lead_car_indicator.action_item.set_enabled(True)
     else:
       self._chevron_info.set_description(tr(CHEVRON_INFO_DESCRIPTION["disabled"]))
       self._chevron_info.action_item.set_enabled(False)
       ui_state.params.put("ChevronInfo", 0)
+      self._lead_car_indicator.set_description(tr(LEAD_CAR_INDICATOR_DESCRIPTION["disabled"]))
+      self._lead_car_indicator.action_item.set_enabled(False)
+      ui_state.params.put_bool("LeadCarIndicator", False)
 
   def _render(self, rect):
     self._scroller.render(rect)
@@ -152,3 +173,5 @@ class VisualsLayout(Widget):
     if not ui_state.has_longitudinal_control:
       self._chevron_info.set_description(tr(CHEVRON_INFO_DESCRIPTION["disabled"]))
       self._chevron_info.show_description(True)
+      self._lead_car_indicator.set_description(tr(LEAD_CAR_INDICATOR_DESCRIPTION["disabled"]))
+      self._lead_car_indicator.show_description(True)

@@ -7,6 +7,7 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.common.filter_simple import FirstOrderFilter
 
 from openpilot.selfdrive.ui.sunnypilot.mici.onroad.confidence_ball import ConfidenceBallSP
+from openpilot.selfdrive.ui.sunnypilot.onroad.lead_car_indicator import LeadCarIndicator
 
 
 def draw_circle_gradient(center_x: float, center_y: float, radius: int,
@@ -29,6 +30,7 @@ class ConfidenceBall(Widget, ConfidenceBallSP):
     ConfidenceBallSP.__init__(self)
     self._demo = demo
     self._confidence_filter = FirstOrderFilter(-0.5, 0.5, 1 / gui_app.target_fps)
+    self._lead_car_indicator = LeadCarIndicator()
 
   def update_filter(self, value: float):
     self._confidence_filter.update(value)
@@ -53,6 +55,12 @@ class ConfidenceBall(Widget, ConfidenceBallSP):
       SIDE_PANEL_WIDTH,
       self.rect.height,
     )
+
+    if not self._demo and ui_state.car_lead_indicator:
+      sm = ui_state.sm
+      radar_state = sm['radarState'] if sm.valid['radarState'] else None
+      if self._lead_car_indicator.draw_in_panel(content_rect, radar_state):
+        return
 
     status_dot_radius = 24
     dot_height = (1 - self._confidence_filter.x) * (content_rect.height - 2 * status_dot_radius) + status_dot_radius

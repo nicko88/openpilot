@@ -1444,6 +1444,19 @@
               ]
             },
             {
+              "key": "LeadCarIndicator",
+              "widget": "toggle",
+              "title": "Lead Car Panel Indicator",
+              "description": "Shows a car icon on the right panel tracking the lead vehicle. Position moves up as lead gets closer. Color - green = far, orange = medium, red = close.",
+              "enablement": [
+                {
+                  "type": "capability",
+                  "field": "has_longitudinal_control",
+                  "equals": true
+                }
+              ]
+            },
+            {
               "key": "ChevronInfo",
               "widget": "option",
               "title": "Display Metrics Below Chevron",

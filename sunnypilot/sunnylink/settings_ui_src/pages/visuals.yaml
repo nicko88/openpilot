@@ -44,6 +44,13 @@ sections:
       This displays what the car is currently doing, not what the planner is requesting.
     visibility:
     - $ref: '#/macros/hide_on_mici'
+  - key: LeadCarIndicator
+    widget: toggle
+    title: Lead Car Panel Indicator
+    description: Shows a car icon on the right panel tracking the lead vehicle. Position moves up as lead gets closer.
+      Color - green = far, orange = medium, red = close.
+    enablement:
+    - $ref: '#/macros/longitudinal'
   - key: ChevronInfo
     widget: option
     title: Display Metrics Below Chevron

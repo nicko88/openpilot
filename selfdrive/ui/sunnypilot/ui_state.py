@@ -131,6 +131,7 @@ class UIStateSP:
     self.active_bundle = self.params.get("ModelManager_ActiveBundle")
     self.blindspot = self.params.get_bool("BlindSpot")
     self.chevron_metrics = self.params.get("ChevronInfo")
+    self.car_lead_indicator = self.params.get_bool("LeadCarIndicator")
     self.custom_interactive_timeout = self.params.get("InteractivityTimeout", return_default=True)
     self.developer_ui = self.params.get("DevUIInfo")
     self.hide_v_ego_ui = self.params.get_bool("HideVEgoUI")

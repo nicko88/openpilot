@@ -136,8 +136,11 @@ class ModelRenderer(Widget, ChevronMetrics, ModelRendererSP):
     self._draw_path(sm)
 
     if render_lead_indicator and radar_state:
-      self._draw_lead_indicator()
-      self.chevron_metrics.draw_lead_status(sm, radar_state, self._rect, self._lead_vehicles)
+      if ui_state.car_lead_indicator:
+        self.lead_car_indicator.draw_lead_car(sm, radar_state, self._rect, self._lead_vehicles)
+      else:
+        self._draw_lead_indicator()
+        self.chevron_metrics.draw_lead_status(sm, radar_state, self._rect, self._lead_vehicles)
 
   def _update_raw_points(self, model):
     """Update raw 3D points from model data"""

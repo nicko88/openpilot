@@ -153,8 +153,8 @@ class ModelRenderer(Widget, ModelRendererSP):
       self._draw_lane_lines()
       self._draw_path(sm)
 
-    # if render_lead_indicator and radar_state:
-    #   self._draw_lead_indicator()
+    if render_lead_indicator and radar_state and not ui_state.car_lead_indicator:
+      self._draw_lead_indicator()
 
   def _update_raw_points(self, model):
     """Update raw 3D points from model data"""
