@@ -20,6 +20,7 @@ _YREL_ABS_MAX = 1.6
 
 _VREL_DEADBAND = -1.5
 _VREL_FULL = -6.0
+_LEADONE_PROB_MIN = 0.85
 
 _V_EGO_MIN = 5.0
 
@@ -103,7 +104,8 @@ class RadarDistanceController:
       v_ego = 0.0
 
     if radarstate is not None and radarstate.leadOne.status \
-        and float(radarstate.leadOne.vRel) <= _VREL_DEADBAND:
+        and float(radarstate.leadOne.vRel) <= _VREL_DEADBAND \
+        and float(radarstate.leadOne.modelProb) >= _LEADONE_PROB_MIN:
       self._release()
       return
 
