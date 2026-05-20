@@ -9,6 +9,7 @@ from cereal import custom
 import numpy as np
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.params import Params
+from opendbc.sunnypilot.car.toyota.values import ToyotaFlagsSP
 
 AccelPersonality = custom.LongitudinalPlanSP.AccelerationPersonality
 ACCEL_PERSONALITY_OPTIONS = [AccelPersonality.eco, AccelPersonality.normal, AccelPersonality.sport]
@@ -16,9 +17,9 @@ ACCEL_PERSONALITY_OPTIONS = [AccelPersonality.eco, AccelPersonality.normal, Acce
 
 A_MAX_BP = [0.0, 4.0, 8.0, 16.0, 40.0]
 A_MAX_V = {
-  AccelPersonality.eco:    [1.80, 1.80, 1.20, 0.40, 0.08],
+  AccelPersonality.eco:    [1.20, 1.40, 1.20, 0.40, 0.08],
   AccelPersonality.normal: [1.80, 1.80, 1.35, 0.50, 0.15],
-  AccelPersonality.sport:  [1.80, 1.80, 1.50, 0.70, 0.25],
+  AccelPersonality.sport:  [2.20, 2.20, 1.60, 0.70, 0.25],
 }
 
 COAST_DRAG_BP = [0.0, 10.0, 25.0, 40.0]
@@ -35,13 +36,19 @@ A_MIN_FLOOR_V = {
   AccelPersonality.sport:  [-0.35, -0.65, -1.00, -0.95],
 }
 
+SOC_FLOOR_HIGH_PCT  = 70
+SOC_FLOOR_LOW_PCT   = 40
+SOC_FLOOR_SCALE_HI  = 1.10
+SOC_FLOOR_SCALE_LO  = 0.90
+
 DEFICIT_TO_FLOOR = 8.5
 COAST_DEADBAND = 1.0
 RAMP_OFF_RANGE = 5.0
 
 A_MIN_TIGHTEN_RATE = 0.6
 A_MIN_RELAX_RATE = 0.9
-A_MAX_RATE = 0.6
+A_MAX_RATE_UP = 1.5
+A_MAX_RATE_DOWN = 0.6
 
 MIN_MAX_GAP = 0.05
 
@@ -49,10 +56,14 @@ PARAM_REFRESH_FRAMES = max(1, int(1.0 / DT_MDL))
 
 
 class AccelPersonalityController:
-  def __init__(self):
+  def __init__(self, CP_SP=None):
     self.params = Params()
     self.frame = 0
     self._first = True
+
+    self._hybrid_telemetry = bool(CP_SP and (CP_SP.flags & ToyotaFlagsSP.SP_HYBRID_TELEMETRY))
+    self._hybrid_aware = self.params.get_bool('HybridAwareLong')
+    self._hv_soc_pct = 0
 
     val = self.params.get('AccelPersonality')
     self._personality = val if val is not None else AccelPersonality.normal
@@ -77,11 +88,14 @@ class AccelPersonalityController:
         self._v_cruise = float(sm['carState'].vCruise) * (1000.0 / 3600.0)
       except Exception:
         pass
+      if self._hybrid_telemetry:
+        self._hv_soc_pct = int(sm['carStateSP'].hvSocPct)
 
     if self.frame % PARAM_REFRESH_FRAMES == 0:
       val = self.params.get('AccelPersonality')
       self._personality = val if val is not None else AccelPersonality.normal
       self._enabled = self.params.get_bool('AccelPersonalityEnabled')
+      self._hybrid_aware = self.params.get_bool('HybridAwareLong')
 
   @property
   def accel_personality(self) -> int:
@@ -150,11 +164,20 @@ class AccelPersonalityController:
     base = float(np.interp(v_ego, A_MAX_BP, A_MAX_V[self._personality]))
     return base * self._ramp_off(v_ego)
 
+  def _soc_floor_scale(self) -> float:
+    if not (self._hybrid_telemetry and self._hybrid_aware):
+      return 1.0
+    if self._hv_soc_pct >= SOC_FLOOR_HIGH_PCT:
+      return SOC_FLOOR_SCALE_HI
+    if 0 < self._hv_soc_pct <= SOC_FLOOR_LOW_PCT:
+      return SOC_FLOOR_SCALE_LO
+    return 1.0
+
   def _target_min(self, v_ego: float) -> float:
     coast = float(np.interp(v_ego, COAST_DRAG_BP, COAST_DRAG_V[self._personality]))
     if self._v_cruise <= 0.0 or v_ego >= self._v_cruise:
       return coast
-    floor = float(np.interp(v_ego, A_MIN_FLOOR_BP, A_MIN_FLOOR_V[self._personality]))
+    floor = float(np.interp(v_ego, A_MIN_FLOOR_BP, A_MIN_FLOOR_V[self._personality])) * self._soc_floor_scale()
     deficit = self._v_cruise - v_ego
     t = float(np.clip(deficit / DEFICIT_TO_FLOOR, 0.0, 1.0)) ** 1.5
     return coast + t * (floor - coast)
@@ -181,7 +204,7 @@ class AccelPersonalityController:
       return self._a_min, self._a_max
 
     new_min = self._rate_limit(self._a_min, t_min, rate_down=A_MIN_TIGHTEN_RATE, rate_up=A_MIN_RELAX_RATE)
-    new_max = self._rate_limit(self._a_max, t_max, rate_down=A_MAX_RATE, rate_up=A_MAX_RATE)
+    new_max = self._rate_limit(self._a_max, t_max, rate_down=A_MAX_RATE_DOWN, rate_up=A_MAX_RATE_UP)
 
     new_min = min(new_min, new_max - MIN_MAX_GAP)
 

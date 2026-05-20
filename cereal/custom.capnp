@@ -443,6 +443,13 @@ struct BackupManagerSP @0xf98d843bfd7004a3 {
 
 struct CarStateSP @0xb86e6369214c01c8 {
   speedLimit @0 :Float32;
+  hvSocPct @1 :UInt8;
+  hybridDriveState @2 :UInt8;
+  coastFuelCut @3 :Bool;
+  brakeHydraulicPressure @4 :UInt8;
+  hvRegenCurrent @5 :UInt8;
+  hvBusVoltage @6 :UInt8;
+  driveModeState @7 :UInt8;
 }
 
 struct LiveMapDataSP @0xf416ec09499d9d19 {
