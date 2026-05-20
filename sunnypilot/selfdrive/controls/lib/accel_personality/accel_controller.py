@@ -167,9 +167,12 @@ class AccelPersonalityController:
   def _soc_floor_scale(self) -> float:
     if not (self._hybrid_telemetry and self._hybrid_aware):
       return 1.0
-    if self._hv_soc_pct >= SOC_FLOOR_HIGH_PCT:
+    soc = self._hv_soc_pct
+    if soc <= 0 or soc > 100:
+      return 1.0
+    if soc >= SOC_FLOOR_HIGH_PCT:
       return SOC_FLOOR_SCALE_HI
-    if 0 < self._hv_soc_pct <= SOC_FLOOR_LOW_PCT:
+    if soc <= SOC_FLOOR_LOW_PCT:
       return SOC_FLOOR_SCALE_LO
     return 1.0
 
