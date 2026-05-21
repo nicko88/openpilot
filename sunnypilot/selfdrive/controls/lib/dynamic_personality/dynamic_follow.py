@@ -13,7 +13,6 @@ import numpy as np
 from cereal import log
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_MDL
-from opendbc.sunnypilot.car.toyota.values import ToyotaFlagsSP
 
 
 LongPersonality = log.LongitudinalPersonality
@@ -44,9 +43,6 @@ ALEAD_DELTA_MAX      = 0.28
 ATAU_RESET      = 1.5
 ATAU_DELTA_MAX  = 0.14
 ATAU_GATE_ALEAD = -0.2
-
-COAST_DELTA_MAX  = 0.10
-COAST_GATE_ALEAD = 0.3
 
 # Lead-flicker modifier: when radar lead state oscillates (status flips,
 # dRel jumps from track-id churn), widen t_follow so MPC has buffer to
@@ -87,22 +83,17 @@ class ModifierDeltas:
   alead: float = 0.0
   atau: float = 0.0
   flicker: float = 0.0
-  coast: float = 0.0
 
   @property
   def total(self) -> float:
-    return self.jerk + max(self.cutin, self.flicker) + max(self.alead, self.closing) + self.atau + self.coast
+    return self.jerk + max(self.cutin, self.flicker) + max(self.alead, self.closing) + self.atau
 
 
 class FollowDistanceController:
-  def __init__(self, CP_SP=None):
+  def __init__(self):
     self.params = Params()
     self._frame = 0
     self._first = True
-
-    self._hybrid_telemetry = bool(CP_SP and (CP_SP.flags & ToyotaFlagsSP.SP_HYBRID_TELEMETRY))
-    self._hybrid_aware = self.params.get_bool('HybridAwareLong')
-    self._coast_fuel_cut = False
 
     val = self.params.get('LongitudinalPersonality')
     self._personality = val if val is not None else LongPersonality.standard
@@ -169,12 +160,10 @@ class FollowDistanceController:
     self._smoothed_speed_scale = 1.0
     self._reset_history()
 
-  def update(self, carstate_sp=None):
+  def update(self):
     self._frame += 1
     if self._cooldown > 0:
       self._cooldown -= 1
-
-    self._coast_fuel_cut = bool(carstate_sp.coastFuelCut) if (self._hybrid_telemetry and carstate_sp is not None) else False
 
     if self._frame % PARAM_REFRESH_FRAMES == 0:
       val = self.params.get('LongitudinalPersonality')
@@ -184,7 +173,6 @@ class FollowDistanceController:
         self._cooldown = self._cooldown_frames
         self._reset_history()
       self._enabled = self.params.get_bool('DynamicFollow')
-      self._hybrid_aware = self.params.get_bool('HybridAwareLong')
 
   def get_follow_distance_multiplier(self, v_ego: float, radarstate=None) -> float:
     v_ego = max(0.0, v_ego)
@@ -244,10 +232,6 @@ class FollowDistanceController:
   def dbg_flicker_delta(self) -> float:
     return self._dbg.flicker
 
-  @property
-  def dbg_coast_delta(self) -> float:
-    return self._dbg.coast
-
   def _reset_history(self):
     self._alead_history.clear()
     self._jerk_history.clear()
@@ -294,7 +278,6 @@ class FollowDistanceController:
       alead   = self._mod_alead(a_lead),
       atau    = self._mod_atau(a_tau, a_lead),
       flicker = self._mod_flicker(),
-      coast   = self._mod_driver_coast(a_lead),
     )
 
     self._prev_lead = status
@@ -378,13 +361,6 @@ class FollowDistanceController:
     if a_lead >= ATAU_GATE_ALEAD:
       return 0.0
     return ATAU_DELTA_MAX * float(np.clip(a_tau / ATAU_RESET, 0.0, 1.0))
-
-  def _mod_driver_coast(self, a_lead: float) -> float:
-    if not (self._hybrid_telemetry and self._hybrid_aware and self._coast_fuel_cut):
-      return 0.0
-    if a_lead >= COAST_GATE_ALEAD:
-      return 0.0
-    return COAST_DELTA_MAX
 
   def _mod_flicker(self) -> float:
     if len(self._status_history) < FLICKER_WINDOW_FRAMES // 2:

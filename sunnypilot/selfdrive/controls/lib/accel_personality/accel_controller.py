@@ -9,7 +9,6 @@ from cereal import custom
 import numpy as np
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.params import Params
-from opendbc.sunnypilot.car.toyota.values import ToyotaFlagsSP
 
 AccelPersonality = custom.LongitudinalPlanSP.AccelerationPersonality
 ACCEL_PERSONALITY_OPTIONS = [AccelPersonality.eco, AccelPersonality.normal, AccelPersonality.sport]
@@ -36,11 +35,6 @@ A_MIN_FLOOR_V = {
   AccelPersonality.sport:  [-0.35, -0.65, -1.00, -0.95],
 }
 
-SOC_FLOOR_HIGH_PCT  = 70
-SOC_FLOOR_LOW_PCT   = 40
-SOC_FLOOR_SCALE_HI  = 1.10
-SOC_FLOOR_SCALE_LO  = 0.90
-
 DEFICIT_TO_FLOOR = 8.5
 COAST_DEADBAND = 1.0
 RAMP_OFF_RANGE = 5.0
@@ -56,14 +50,10 @@ PARAM_REFRESH_FRAMES = max(1, int(1.0 / DT_MDL))
 
 
 class AccelPersonalityController:
-  def __init__(self, CP_SP=None):
+  def __init__(self):
     self.params = Params()
     self.frame = 0
     self._first = True
-
-    self._hybrid_telemetry = bool(CP_SP and (CP_SP.flags & ToyotaFlagsSP.SP_HYBRID_TELEMETRY))
-    self._hybrid_aware = self.params.get_bool('HybridAwareLong')
-    self._hv_soc_pct = 0
 
     val = self.params.get('AccelPersonality')
     self._personality = val if val is not None else AccelPersonality.normal
@@ -88,14 +78,11 @@ class AccelPersonalityController:
         self._v_cruise = float(sm['carState'].vCruise) * (1000.0 / 3600.0)
       except Exception:
         pass
-      if self._hybrid_telemetry:
-        self._hv_soc_pct = int(sm['carStateSP'].hvSocPct)
 
     if self.frame % PARAM_REFRESH_FRAMES == 0:
       val = self.params.get('AccelPersonality')
       self._personality = val if val is not None else AccelPersonality.normal
       self._enabled = self.params.get_bool('AccelPersonalityEnabled')
-      self._hybrid_aware = self.params.get_bool('HybridAwareLong')
 
   @property
   def accel_personality(self) -> int:
@@ -164,23 +151,11 @@ class AccelPersonalityController:
     base = float(np.interp(v_ego, A_MAX_BP, A_MAX_V[self._personality]))
     return base * self._ramp_off(v_ego)
 
-  def _soc_floor_scale(self) -> float:
-    if not (self._hybrid_telemetry and self._hybrid_aware):
-      return 1.0
-    soc = self._hv_soc_pct
-    if soc <= 0 or soc > 100:
-      return 1.0
-    if soc >= SOC_FLOOR_HIGH_PCT:
-      return SOC_FLOOR_SCALE_HI
-    if soc <= SOC_FLOOR_LOW_PCT:
-      return SOC_FLOOR_SCALE_LO
-    return 1.0
-
   def _target_min(self, v_ego: float) -> float:
     coast = float(np.interp(v_ego, COAST_DRAG_BP, COAST_DRAG_V[self._personality]))
     if self._v_cruise <= 0.0 or v_ego >= self._v_cruise:
       return coast
-    floor = float(np.interp(v_ego, A_MIN_FLOOR_BP, A_MIN_FLOOR_V[self._personality])) * self._soc_floor_scale()
+    floor = float(np.interp(v_ego, A_MIN_FLOOR_BP, A_MIN_FLOOR_V[self._personality]))
     deficit = self._v_cruise - v_ego
     t = float(np.clip(deficit / DEFICIT_TO_FLOOR, 0.0, 1.0)) ** 1.5
     return coast + t * (floor - coast)

@@ -31,8 +31,8 @@ class LongitudinalPlannerSP:
     self.events_sp = EventsSP()
     self.resolver = SpeedLimitResolver()
     self.dec = DynamicExperimentalController(CP, mpc)
-    self.accel_controller = AccelPersonalityController(CP_SP)
-    self.dynamic_follow = FollowDistanceController(CP_SP)
+    self.accel_controller = AccelPersonalityController()
+    self.dynamic_follow = FollowDistanceController()
     self.radar_distance = RadarDistanceController()
     self.sm_sp = messaging.SubMaster(['liveTracks'])
     self.scc = SmartCruiseControl()
@@ -116,7 +116,7 @@ class LongitudinalPlannerSP:
     self.e2e_alerts_helper.update(sm, self.events_sp)
     self.sm_sp.update(0)
     self.accel_controller.update(sm)
-    self.dynamic_follow.update(sm['carStateSP'])
+    self.dynamic_follow.update()
     self.radar_distance.update(sm, self.sm_sp)
 
   def publish_longitudinal_plan_sp(self, sm: messaging.SubMaster, pm: messaging.PubMaster) -> None:

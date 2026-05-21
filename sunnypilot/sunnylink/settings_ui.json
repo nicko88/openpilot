@@ -2361,23 +2361,6 @@
               "type": "not_engaged"
             }
           ]
-        },
-        {
-          "key": "HybridAwareLong",
-          "widget": "toggle",
-          "needs_onroad_cycle": true,
-          "title": "Toyota: Hybrid-Aware Longitudinal (Prius TSS2)",
-          "description": "Use HV battery state-of-charge and decel-fuel-cut signals to tune follow distance and brake floor. Only takes effect on supported hybrids (currently Prius TSS2).",
-          "enablement": [
-            {
-              "type": "not_engaged"
-            },
-            {
-              "type": "capability",
-              "field": "has_longitudinal_control",
-              "equals": true
-            }
-          ]
         }
       ]
     }
