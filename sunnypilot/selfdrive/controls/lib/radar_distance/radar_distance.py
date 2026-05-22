@@ -15,7 +15,7 @@ from openpilot.sunnypilot.selfdrive.controls.lib.lead_persistence.lead_persisten
 
 
 _DREL_MIN = 40.0
-_DREL_MAX = 150.0
+_DREL_MAX = 180.0
 _YREL_ABS_MAX = 1.6
 
 _VREL_DEADBAND = -1.5
@@ -39,6 +39,16 @@ _A_CEIL_HIGH = 0.8
 _A_CEIL_COAST = 0.0
 _A_CEIL_BRAKE = -0.5
 _A_CEIL_RELEASED = 2.5
+
+# Emergency override: when a raw track shows extreme closing in our lane,
+# bypass the TTC band stand-down so we keep some brake authority while the
+# MPC catches up. Tight yRel + longer persistence guard against
+# false-positive merges and sharp-curve roadside tracks.
+_EMERGENCY_VREL          = -15.0  # m/s; only true closing
+_EMERGENCY_TTC_MAX       = 5.0
+_EMERGENCY_YREL_ABS      = 1.0    # tighter than _YREL_ABS_MAX
+_EMERGENCY_ACTIVATE_MIN  = 4      # frames in bin before emergency override
+_A_CEIL_EMERGENCY        = -1.0   # m/s^2 ceiling under emergency
 
 _A_CEIL_RATE_DOWN = 0.6
 _A_CEIL_RATE_UP = 0.8
@@ -229,6 +239,12 @@ class RadarDistanceController:
   def _target_ceiling(self) -> float:
     if not self._state.active:
       return _A_CEIL_RELEASED
+
+    if (self._state.v_rel <= _EMERGENCY_VREL
+        and self._state.ttc <= _EMERGENCY_TTC_MAX
+        and abs(self._state.y_rel) <= _EMERGENCY_YREL_ABS
+        and self._state.frames_seen >= _EMERGENCY_ACTIVATE_MIN):
+      return _A_CEIL_EMERGENCY
 
     ttc = self._state.ttc
     if ttc >= _TTC_NONE:

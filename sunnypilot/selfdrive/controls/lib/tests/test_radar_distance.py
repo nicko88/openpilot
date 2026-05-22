@@ -8,7 +8,9 @@ from openpilot.sunnypilot.selfdrive.controls.lib.radar_distance.radar_distance i
   RadarDistanceController,
   _ACTIVATE_FRAMES,
   _A_CEIL_COAST,
+  _A_CEIL_EMERGENCY,
   _DEACTIVATE_FRAMES,
+  _DREL_MAX,
 )
 
 
@@ -29,10 +31,11 @@ class FakeTracks:
 
 
 class FakeLead:
-  def __init__(self, status=False, v_rel=0.0, d_rel=0.0):
+  def __init__(self, status=False, v_rel=0.0, d_rel=0.0, model_prob=0.95):
     self.status = status
     self.vRel = v_rel
     self.dRel = d_rel
+    self.modelProb = model_prob
 
 
 class FakeRadarState:
@@ -198,3 +201,38 @@ class TestRadarDistanceController:
     for _ in range(_ACTIVATE_FRAMES + 5):
       c.update(FakeSM(), FakeSmSp(pts))
     assert not c.active
+
+  def test_drel_max_widened_to_180(self):
+    c = _make()
+    pts = [FakePoint(1, 165.0, 0.0, -22.0)]
+    for _ in range(_ACTIVATE_FRAMES + 5):
+      c.update(FakeSM(), FakeSmSp(pts))
+    assert c.active
+    assert c.d_rel < _DREL_MAX
+
+  def test_emergency_override_fires(self):
+    c = _make()
+    pts = [FakePoint(1, 90.0, 0.5, -20.0)]
+    for _ in range(200):
+      c.update(FakeSM(), FakeSmSp(pts))
+    ceiling = c.get_accel_ceiling(20.0)
+    assert ceiling is not None
+    assert ceiling <= _A_CEIL_EMERGENCY + 0.1
+
+  def test_emergency_requires_tight_yrel(self):
+    c = _make()
+    pts = [FakePoint(1, 90.0, 1.3, -20.0)]
+    for _ in range(200):
+      c.update(FakeSM(), FakeSmSp(pts))
+    ceiling = c.get_accel_ceiling(20.0)
+    if ceiling is not None:
+      assert ceiling > _A_CEIL_EMERGENCY + 0.2
+
+  def test_emergency_requires_extreme_vrel(self):
+    c = _make()
+    pts = [FakePoint(1, 50.0, 0.5, -10.0)]
+    for _ in range(200):
+      c.update(FakeSM(), FakeSmSp(pts))
+    ceiling = c.get_accel_ceiling(20.0)
+    if ceiling is not None:
+      assert ceiling > _A_CEIL_EMERGENCY + 0.2
