@@ -44,6 +44,11 @@ ATAU_RESET      = 1.5
 ATAU_DELTA_MAX  = 0.14
 ATAU_GATE_ALEAD = -0.2
 
+ALEAD_RATE_DEADBAND = -1.5
+ALEAD_RATE_FULL     = -8.0
+ALEAD_RATE_DELTA    = 0.25
+ALEAD_RATE_EMA_TAU  = 0.15
+
 # Lead-flicker modifier: when radar lead state oscillates (status flips,
 # dRel jumps from track-id churn), widen t_follow so MPC has buffer to
 # coast through the noise instead of brake/release ringing. We cannot
@@ -81,12 +86,14 @@ class ModifierDeltas:
   cutin: float = 0.0
   closing: float = 0.0
   alead: float = 0.0
+  alead_rate: float = 0.0
   atau: float = 0.0
   flicker: float = 0.0
 
   @property
   def total(self) -> float:
-    return self.jerk + max(self.cutin, self.flicker) + max(self.alead, self.closing) + self.atau
+    return self.jerk + max(self.cutin, self.flicker) \
+      + max(self.alead, self.closing, self.alead_rate) + self.atau
 
 
 class FollowDistanceController:
@@ -114,6 +121,9 @@ class FollowDistanceController:
     self._cutin_confirm = 0
     self._lead_grace = 0
     self._last_lead_target: float | None = None
+
+    self._prev_alead_for_rate: float | None = None
+    self._alead_rate_ema = 0.0
 
     self._dbg = ModifierDeltas()
     self._smoothed_speed_scale = 1.0
@@ -243,6 +253,8 @@ class FollowDistanceController:
     self._prev_drel = 0.0
     self._lead_grace = 0
     self._last_lead_target = None
+    self._prev_alead_for_rate = None
+    self._alead_rate_ema = 0.0
     self._dbg = ModifierDeltas()
 
   def _compute_target(self, v_ego: float, lead) -> float:
@@ -272,12 +284,13 @@ class FollowDistanceController:
     self._update_history(a_lead, status, d_rel)
 
     self._dbg = ModifierDeltas(
-      jerk    = self._mod_jerk(),
-      cutin   = self._mod_cutin(),
-      closing = self._mod_closing(v_rel),
-      alead   = self._mod_alead(a_lead),
-      atau    = self._mod_atau(a_tau, a_lead),
-      flicker = self._mod_flicker(),
+      jerk       = self._mod_jerk(),
+      cutin      = self._mod_cutin(),
+      closing    = self._mod_closing(v_rel),
+      alead      = self._mod_alead(a_lead),
+      alead_rate = self._mod_alead_rate(a_lead),
+      atau       = self._mod_atau(a_tau, a_lead),
+      flicker    = self._mod_flicker(),
     )
 
     self._prev_lead = status
@@ -296,6 +309,8 @@ class FollowDistanceController:
     self._jerk_history.clear()
     self._status_history.clear()
     self._drel_jumps.clear()
+    self._prev_alead_for_rate = None
+    self._alead_rate_ema = 0.0
 
   def _update_history(self, a_lead: float, status: bool, d_rel: float):
     if self._alead_history:
@@ -356,6 +371,22 @@ class FollowDistanceController:
       return 0.0
     span = ALEAD_DECEL_MAX - ALEAD_DECEL_DEADBAND
     return ALEAD_DELTA_MAX * float(np.clip((a_lead - ALEAD_DECEL_DEADBAND) / span, 0.0, 1.0))
+
+  def _mod_alead_rate(self, a_lead: float) -> float:
+    if self._prev_alead_for_rate is None:
+      self._prev_alead_for_rate = a_lead
+      self._alead_rate_ema = 0.0
+      return 0.0
+    raw_rate = (a_lead - self._prev_alead_for_rate) / DT_MDL
+    alpha = DT_MDL / (ALEAD_RATE_EMA_TAU + DT_MDL)
+    self._alead_rate_ema += alpha * (raw_rate - self._alead_rate_ema)
+    self._prev_alead_for_rate = a_lead
+
+    if self._alead_rate_ema >= ALEAD_RATE_DEADBAND:
+      return 0.0
+    span = ALEAD_RATE_FULL - ALEAD_RATE_DEADBAND
+    scale = float(np.clip((self._alead_rate_ema - ALEAD_RATE_DEADBAND) / span, 0.0, 1.0))
+    return ALEAD_RATE_DELTA * scale
 
   def _mod_atau(self, a_tau: float, a_lead: float) -> float:
     if a_lead >= ATAU_GATE_ALEAD:
