@@ -48,6 +48,7 @@ ALEAD_RATE_DEADBAND = -1.5
 ALEAD_RATE_FULL     = -8.0
 ALEAD_RATE_DELTA    = 0.25
 ALEAD_RATE_EMA_TAU  = 0.15
+ALEAD_RATE_BOOST_TAU = 0.10
 
 # Lead-flicker modifier: when radar lead state oscillates (status flips,
 # dRel jumps from track-id churn), widen t_follow so MPC has buffer to
@@ -93,7 +94,7 @@ class ModifierDeltas:
   @property
   def total(self) -> float:
     return self.jerk + max(self.cutin, self.flicker) \
-      + max(self.alead, self.closing, self.alead_rate) + self.atau
+      + max(self.alead, self.closing) + self.atau
 
 
 class FollowDistanceController:
@@ -124,6 +125,7 @@ class FollowDistanceController:
 
     self._prev_alead_for_rate: float | None = None
     self._alead_rate_ema = 0.0
+    self._alead_rate_boost = 0.0
 
     self._dbg = ModifierDeltas()
     self._smoothed_speed_scale = 1.0
@@ -196,11 +198,15 @@ class FollowDistanceController:
 
     target = self._compute_target(v_ego, lead)
 
+    boost_target = self._dbg.alead_rate
+    boost_alpha = DT_MDL / (ALEAD_RATE_BOOST_TAU + DT_MDL)
+    self._alead_rate_boost += boost_alpha * (boost_target - self._alead_rate_boost)
+
     if self._first:
       self._t_follow = target
       self._smoothed_speed_scale = target_scale
       self._first = False
-      return float(self._t_follow * self._smoothed_speed_scale)
+      return float((self._t_follow + self._alead_rate_boost) * self._smoothed_speed_scale)
 
     rate_up   = float(np.interp(v_ego, RATE_UP_BP,   RATE_UP_V))   * DT_MDL
     rate_down = float(np.interp(v_ego, RATE_DOWN_BP, RATE_DOWN_V)) * DT_MDL
@@ -212,7 +218,7 @@ class FollowDistanceController:
       step = rate_up if target > self._t_follow else rate_down
       self._t_follow = float(np.clip(target, self._t_follow - step, self._t_follow + step))
 
-    return float(self._t_follow * self._smoothed_speed_scale)
+    return float((self._t_follow + self._alead_rate_boost) * self._smoothed_speed_scale)
 
   @property
   def current_t_follow(self) -> float:
@@ -255,6 +261,7 @@ class FollowDistanceController:
     self._last_lead_target = None
     self._prev_alead_for_rate = None
     self._alead_rate_ema = 0.0
+    self._alead_rate_boost = 0.0
     self._dbg = ModifierDeltas()
 
   def _compute_target(self, v_ego: float, lead) -> float:
@@ -311,6 +318,7 @@ class FollowDistanceController:
     self._drel_jumps.clear()
     self._prev_alead_for_rate = None
     self._alead_rate_ema = 0.0
+    self._alead_rate_boost = 0.0
 
   def _update_history(self, a_lead: float, status: bool, d_rel: float):
     if self._alead_history:

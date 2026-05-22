@@ -107,3 +107,31 @@ class TestAleadRateAnticipator:
 
   def test_deadband_value_is_negative(self):
     assert ALEAD_RATE_DEADBAND < 0
+
+  def test_boost_bypasses_rate_limit(self):
+    df = _make()
+    df.update()
+    profile = [-0.5] * 5 + [-4.0] * 20
+    tf_history = []
+    for a in profile:
+      rs = FakeRadarState(FakeLead(a_lead=a))
+      df.update()
+      tf = df.get_follow_distance_multiplier(15.0, rs)
+      tf_history.append(tf)
+    tf_just_after_step = tf_history[5]
+    tf_baseline = tf_history[4]
+    assert tf_just_after_step - tf_baseline > 0.05
+
+  def test_boost_resets_after_lead_lost(self):
+    df = _make()
+    df.update()
+    for i in range(10):
+      a = max(0 - 0.5 * i, -3.0)
+      rs = FakeRadarState(FakeLead(a_lead=a))
+      df.update()
+      df.get_follow_distance_multiplier(15.0, rs)
+    assert df._alead_rate_boost > 0.0
+    for _ in range(30):
+      df.update()
+      df.get_follow_distance_multiplier(15.0, None)
+    assert df._alead_rate_boost == 0.0
