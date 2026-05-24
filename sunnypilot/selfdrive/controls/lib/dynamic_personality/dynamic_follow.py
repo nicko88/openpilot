@@ -39,6 +39,7 @@ CLOSING_DELTA_MAX     = 0.15
 ALEAD_DECEL_MAX      = -1.0
 ALEAD_DECEL_DEADBAND = -0.3
 ALEAD_DELTA_MAX      = 0.28
+ALEAD_VREL_GATE      = -1.0
 
 ATAU_RESET      = 1.5
 ATAU_DELTA_MAX  = 0.14
@@ -294,7 +295,7 @@ class FollowDistanceController:
       jerk       = self._mod_jerk(),
       cutin      = self._mod_cutin(),
       closing    = self._mod_closing(v_rel),
-      alead      = self._mod_alead(a_lead),
+      alead      = self._mod_alead(a_lead, v_rel),
       alead_rate = self._mod_alead_rate(a_lead),
       atau       = self._mod_atau(a_tau, a_lead),
       flicker    = self._mod_flicker(),
@@ -374,8 +375,10 @@ class FollowDistanceController:
     span = CLOSING_VREL_MAX - CLOSING_VREL_DEADBAND
     return CLOSING_DELTA_MAX * float(np.clip((v_rel - CLOSING_VREL_DEADBAND) / span, 0.0, 1.0))
 
-  def _mod_alead(self, a_lead: float) -> float:
+  def _mod_alead(self, a_lead: float, v_rel: float) -> float:
     if a_lead >= ALEAD_DECEL_DEADBAND:
+      return 0.0
+    if v_rel > ALEAD_VREL_GATE:
       return 0.0
     span = ALEAD_DECEL_MAX - ALEAD_DECEL_DEADBAND
     return ALEAD_DELTA_MAX * float(np.clip((a_lead - ALEAD_DECEL_DEADBAND) / span, 0.0, 1.0))
