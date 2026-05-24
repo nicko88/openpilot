@@ -100,7 +100,10 @@ class RadarDistanceController:
 
     radarstate = None
     if sm is not None:
-      radarstate = sm['radarState'] if 'radarState' in sm.data else None
+      try:
+        radarstate = sm['radarState']
+      except (KeyError, AttributeError, TypeError):
+        radarstate = None
 
     self._lead_persistence.update(radarstate, force_enabled=self._enabled)
 
@@ -164,10 +167,8 @@ class RadarDistanceController:
     if sm_sp is None:
       return []
     try:
-      if 'liveTracks' not in sm_sp.data:
-        return []
       return list(sm_sp['liveTracks'].points)
-    except Exception:
+    except (KeyError, AttributeError, TypeError):
       return []
 
   @staticmethod
