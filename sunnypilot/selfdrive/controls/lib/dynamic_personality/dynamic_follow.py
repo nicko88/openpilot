@@ -39,7 +39,8 @@ CLOSING_DELTA_MAX     = 0.15
 ALEAD_DECEL_MAX      = -1.0
 ALEAD_DECEL_DEADBAND = -0.3
 ALEAD_DELTA_MAX      = 0.28
-ALEAD_VREL_GATE      = -1.0
+ALEAD_VREL_GATE_OPEN  = -1.5
+ALEAD_VREL_GATE_CLOSE = -0.5
 
 ATAU_RESET      = 1.5
 ATAU_DELTA_MAX  = 0.14
@@ -50,6 +51,7 @@ ALEAD_RATE_FULL     = -8.0
 ALEAD_RATE_DELTA    = 0.25
 ALEAD_RATE_EMA_TAU  = 0.15
 ALEAD_RATE_BOOST_TAU = 0.10
+ALEAD_RATE_REACQUIRE_SKIP = 3
 
 # Lead-flicker modifier: when radar lead state oscillates (status flips,
 # dRel jumps from track-id churn), widen t_follow so MPC has buffer to
@@ -66,7 +68,7 @@ FLICKER_DELTA_MAX      = 0.18  # max t_follow delta added under full flicker
 RATE_UP_BP   = [0.0, 20.0]
 RATE_UP_V    = [0.42, 0.25]
 RATE_DOWN_BP = [0.0, 10.0, 25.0]
-RATE_DOWN_V  = [0.08, 0.12, 0.22]
+RATE_DOWN_V  = [0.08, 0.18, 0.35]
 
 LOW_SPEED_SCALE_BP = [0.0, 3.0, 7.0, 12.0]
 LOW_SPEED_SCALE_V  = [0.15, 0.40, 0.75, 1.00]
@@ -127,6 +129,7 @@ class FollowDistanceController:
     self._prev_alead_for_rate: float | None = None
     self._alead_rate_ema = 0.0
     self._alead_rate_boost = 0.0
+    self._alead_rate_skip = 0
 
     self._dbg = ModifierDeltas()
     self._smoothed_speed_scale = 1.0
@@ -262,6 +265,7 @@ class FollowDistanceController:
     self._last_lead_target = None
     self._prev_alead_for_rate = None
     self._alead_rate_ema = 0.0
+    self._alead_rate_skip = 0
     self._alead_rate_boost = 0.0
     self._dbg = ModifierDeltas()
 
@@ -319,6 +323,7 @@ class FollowDistanceController:
     self._drel_jumps.clear()
     self._prev_alead_for_rate = None
     self._alead_rate_ema = 0.0
+    self._alead_rate_skip = 0
     self._alead_rate_boost = 0.0
 
   def _update_history(self, a_lead: float, status: bool, d_rel: float):
@@ -378,12 +383,23 @@ class FollowDistanceController:
   def _mod_alead(self, a_lead: float, v_rel: float) -> float:
     if a_lead >= ALEAD_DECEL_DEADBAND:
       return 0.0
-    if v_rel > ALEAD_VREL_GATE:
+    if v_rel > ALEAD_VREL_GATE_CLOSE:
       return 0.0
+    gate_span = ALEAD_VREL_GATE_OPEN - ALEAD_VREL_GATE_CLOSE
+    gate_scale = float(np.clip((v_rel - ALEAD_VREL_GATE_CLOSE) / gate_span, 0.0, 1.0))
     span = ALEAD_DECEL_MAX - ALEAD_DECEL_DEADBAND
-    return ALEAD_DELTA_MAX * float(np.clip((a_lead - ALEAD_DECEL_DEADBAND) / span, 0.0, 1.0))
+    return ALEAD_DELTA_MAX * gate_scale * float(np.clip((a_lead - ALEAD_DECEL_DEADBAND) / span, 0.0, 1.0))
 
   def _mod_alead_rate(self, a_lead: float) -> float:
+    if not self._prev_lead:
+      self._alead_rate_skip = ALEAD_RATE_REACQUIRE_SKIP
+
+    if self._alead_rate_skip > 0:
+      self._prev_alead_for_rate = a_lead
+      self._alead_rate_ema = 0.0
+      self._alead_rate_skip -= 1
+      return 0.0
+
     if self._prev_alead_for_rate is None:
       self._prev_alead_for_rate = a_lead
       self._alead_rate_ema = 0.0
