@@ -65,6 +65,13 @@ ALEAD_LEVEL_DREL_MAX    = 80.0
 ALEAD_LEVEL_VEGO_MIN    = 8.0
 ALEAD_LEVEL_DELTA       = 0.25
 
+CLOSING_BOOST_VREL_GATE = -3.0
+CLOSING_BOOST_VREL_FULL = -6.0
+CLOSING_BOOST_DREL_MAX  = 100.0
+CLOSING_BOOST_MPROB     = 0.85
+CLOSING_BOOST_VEGO_MIN  = 8.0
+CLOSING_BOOST_DELTA     = 0.25
+
 # Lead-flicker modifier: when radar lead state oscillates (status flips,
 # dRel jumps from track-id churn), widen t_follow so MPC has buffer to
 # coast through the noise instead of brake/release ringing. We cannot
@@ -101,6 +108,7 @@ class ModifierDeltas:
   jerk: float = 0.0
   cutin: float = 0.0
   closing: float = 0.0
+  closing_boost: float = 0.0
   alead: float = 0.0
   alead_rate: float = 0.0
   alead_level: float = 0.0
@@ -220,7 +228,7 @@ class FollowDistanceController:
 
     target = self._compute_target(v_ego, lead)
 
-    boost_target = max(self._dbg.alead_rate, self._dbg.alead_level)
+    boost_target = max(self._dbg.alead_rate, self._dbg.alead_level, self._dbg.closing_boost)
     boost_alpha = DT_MDL / (ALEAD_RATE_BOOST_TAU + DT_MDL)
     self._alead_rate_boost += boost_alpha * (boost_target - self._alead_rate_boost)
 
@@ -269,6 +277,10 @@ class FollowDistanceController:
   @property
   def dbg_alead_level_delta(self) -> float:
     return self._dbg.alead_level
+
+  @property
+  def dbg_closing_boost_delta(self) -> float:
+    return self._dbg.closing_boost
 
   @property
   def dbg_flicker_delta(self) -> float:
@@ -323,14 +335,15 @@ class FollowDistanceController:
     self._update_history(a_lead, status, d_rel)
 
     self._dbg = ModifierDeltas(
-      jerk        = self._mod_jerk(),
-      cutin       = self._mod_cutin(),
-      closing     = self._mod_closing(v_rel),
-      alead       = self._mod_alead(a_lead, v_rel),
-      alead_rate  = self._mod_alead_rate(a_lead),
-      alead_level = self._mod_alead_level(a_lead, v_rel, d_rel, m_prob, v_ego),
-      atau        = self._mod_atau(a_tau, a_lead),
-      flicker     = self._mod_flicker(),
+      jerk          = self._mod_jerk(),
+      cutin         = self._mod_cutin(),
+      closing       = self._mod_closing(v_rel),
+      closing_boost = self._mod_closing_boost(v_rel, d_rel, m_prob, v_ego),
+      alead         = self._mod_alead(a_lead, v_rel),
+      alead_rate    = self._mod_alead_rate(a_lead),
+      alead_level   = self._mod_alead_level(a_lead, v_rel, d_rel, m_prob, v_ego),
+      atau          = self._mod_atau(a_tau, a_lead),
+      flicker       = self._mod_flicker(),
     )
 
     self._prev_lead = status
@@ -446,6 +459,20 @@ class FollowDistanceController:
     span = ALEAD_RATE_FULL - ALEAD_RATE_DEADBAND
     scale = float(np.clip((self._alead_rate_ema - ALEAD_RATE_DEADBAND) / span, 0.0, 1.0))
     return ALEAD_RATE_DELTA * scale
+
+  def _mod_closing_boost(self, v_rel: float, d_rel: float,
+                         m_prob: float, v_ego: float) -> float:
+    if v_rel >= CLOSING_BOOST_VREL_GATE:
+      return 0.0
+    if m_prob < CLOSING_BOOST_MPROB:
+      return 0.0
+    if d_rel <= 0.0 or d_rel > CLOSING_BOOST_DREL_MAX:
+      return 0.0
+    if v_ego < CLOSING_BOOST_VEGO_MIN:
+      return 0.0
+    span = CLOSING_BOOST_VREL_FULL - CLOSING_BOOST_VREL_GATE
+    scale = float(np.clip((v_rel - CLOSING_BOOST_VREL_GATE) / span, 0.0, 1.0))
+    return CLOSING_BOOST_DELTA * scale
 
   def _mod_alead_level(self, a_lead: float, v_rel: float, d_rel: float,
                        m_prob: float, v_ego: float) -> float:
