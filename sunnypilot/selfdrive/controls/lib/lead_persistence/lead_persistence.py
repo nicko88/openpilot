@@ -9,7 +9,7 @@ from collections import deque
 from dataclasses import dataclass
 
 
-_HOLD_FRAMES = 12
+_HOLD_FRAMES = 20
 _STATUS_WINDOW = 20
 _STABILITY_FLIPS_FULL = 6.0
 
