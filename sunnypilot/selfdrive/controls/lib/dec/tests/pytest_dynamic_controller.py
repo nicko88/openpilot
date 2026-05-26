@@ -3,12 +3,14 @@ import pytest
 from openpilot.sunnypilot.selfdrive.controls.lib.dec.dec import DynamicExperimentalController
 
 class MockLeadOne:
-  def __init__(self, status=0.0):
+  def __init__(self, status=0.0, vLead=0.0, dRel=0.0):
     self.status = status
+    self.vLead = vLead
+    self.dRel = dRel
 
 class MockRadarState:
-  def __init__(self, status=0.0):
-    self.leadOne = MockLeadOne(status=status)
+  def __init__(self, status=0.0, vLead=0.0, dRel=0.0):
+    self.leadOne = MockLeadOne(status=status, vLead=vLead, dRel=dRel)
 
 class MockCarState:
   def __init__(self, vEgo=0.0, vCruise=0.0, standstill=False):
@@ -78,6 +80,41 @@ def test_emergency_blended_on_fcw(mock_cp, mock_mpc, default_sm):
   for _ in range(2):
     controller.update(default_sm)
   assert controller.mode() == "blended"
+
+def test_lead_departing_at_standstill_forces_acc(mock_cp, mock_mpc, default_sm):
+  controller = DynamicExperimentalController(mock_cp, mock_mpc, params=MockParams())
+  default_sm['carState'].standstill = True
+  # ramp up standstill_count and lead filter to baseline blended state
+  default_sm['radarState'] = MockRadarState(status=1.0, vLead=0.0, dRel=10.0)
+  for _ in range(15):
+    controller.update(default_sm)
+  assert controller.mode() == "blended"
+  # lead starts rolling away
+  default_sm['radarState'] = MockRadarState(status=1.0, vLead=0.8, dRel=10.0)
+  for _ in range(3):
+    controller.update(default_sm)
+  assert controller.mode() == "acc"
+  assert controller._standstill_count == 0
+
+
+def test_lead_stationary_at_standstill_stays_blended(mock_cp, mock_mpc, default_sm):
+  controller = DynamicExperimentalController(mock_cp, mock_mpc, params=MockParams())
+  default_sm['carState'].standstill = True
+  default_sm['radarState'] = MockRadarState(status=1.0, vLead=0.1, dRel=10.0)
+  for _ in range(15):
+    controller.update(default_sm)
+  assert controller.mode() == "blended"
+
+
+def test_lead_departing_no_standstill_normal_acc(mock_cp, mock_mpc, default_sm):
+  controller = DynamicExperimentalController(mock_cp, mock_mpc, params=MockParams())
+  default_sm['carState'].standstill = False
+  default_sm['carState'].vEgo = 5.0
+  default_sm['radarState'] = MockRadarState(status=1.0, vLead=0.8, dRel=20.0)
+  for _ in range(5):
+    controller.update(default_sm)
+  assert controller.mode() == "acc"
+
 
 def test_radarless_slowdown_triggers_blended(mock_cp, mock_mpc, default_sm):
   mock_cp.radarUnavailable = True

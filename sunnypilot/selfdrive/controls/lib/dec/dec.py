@@ -18,6 +18,10 @@ from typing import Literal
 TRAJECTORY_SIZE = 33
 SET_MODE_TIMEOUT = 15
 
+LEAD_DEPART_VLEAD_GATE = 0.3
+LEAD_DEPART_DREL_MIN = 1.5
+LEAD_DEPART_DREL_MAX = 60.0
+
 # Define the valid mode types
 ModeType = Literal['acc', 'blended']
 
@@ -182,6 +186,8 @@ class DynamicExperimentalController:
     self._has_standstill = False
     self._mpc_fcw_crash_cnt = 0
     self._standstill_count = 0
+    self._lead_vlead = 0.0
+    self._lead_drel = 0.0
     # debug
     self._endpoint_x = float('inf')
     self._expected_distance = 0.0
@@ -223,6 +229,9 @@ class DynamicExperimentalController:
     self._lead_filter.add_data(float(lead_one.status))
     lead_value = self._lead_filter.get_value() or 0.0
     self._has_lead_filtered = lead_value > WMACConstants.LEAD_PROB
+
+    self._lead_vlead = float(getattr(lead_one, 'vLead', 0.0)) if lead_one.status else 0.0
+    self._lead_drel = float(getattr(lead_one, 'dRel', 0.0)) if lead_one.status else 0.0
 
     # MPC FCW detection
     fcw_filtered_value = self._mpc_fcw_filter.get_value() or 0.0
@@ -338,6 +347,14 @@ class DynamicExperimentalController:
     # EMERGENCY: MPC FCW - immediate blended mode
     if self._has_mpc_fcw:
       self._mode_manager.request_mode('blended', confidence=1.0, emergency=True)
+      return
+
+    # Lead departing while ego at standstill: force ACC to catch rolling-away lead
+    if (self._has_lead_filtered and self._has_standstill
+        and self._lead_vlead > LEAD_DEPART_VLEAD_GATE
+        and LEAD_DEPART_DREL_MIN <= self._lead_drel <= LEAD_DEPART_DREL_MAX):
+      self._mode_manager.request_mode('acc', confidence=1.0, emergency=True)
+      self._standstill_count = 0
       return
 
     # If lead detected and not in standstill: always use ACC
