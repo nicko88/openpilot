@@ -53,6 +53,18 @@ ALEAD_RATE_EMA_TAU  = 0.15
 ALEAD_RATE_BOOST_TAU = 0.10
 ALEAD_RATE_REACQUIRE_SKIP = 3
 
+ALEAD_LEVEL_THRESH      = -0.45
+ALEAD_LEVEL_DISARM      = -0.3
+ALEAD_LEVEL_SUSTAIN_S   = 0.4
+ALEAD_LEVEL_DISARM_S    = 0.3
+ALEAD_LEVEL_COOLDOWN_S  = 1.0
+ALEAD_LEVEL_VREL_GATE   = -0.3
+ALEAD_LEVEL_MPROB       = 0.85
+ALEAD_LEVEL_DREL_MIN    = 10.0
+ALEAD_LEVEL_DREL_MAX    = 80.0
+ALEAD_LEVEL_VEGO_MIN    = 8.0
+ALEAD_LEVEL_DELTA       = 0.25
+
 # Lead-flicker modifier: when radar lead state oscillates (status flips,
 # dRel jumps from track-id churn), widen t_follow so MPC has buffer to
 # coast through the noise instead of brake/release ringing. We cannot
@@ -91,6 +103,7 @@ class ModifierDeltas:
   closing: float = 0.0
   alead: float = 0.0
   alead_rate: float = 0.0
+  alead_level: float = 0.0
   atau: float = 0.0
   flicker: float = 0.0
 
@@ -130,6 +143,11 @@ class FollowDistanceController:
     self._alead_rate_ema = 0.0
     self._alead_rate_boost = 0.0
     self._alead_rate_skip = 0
+
+    self._alead_level_sustain = 0
+    self._alead_level_disarm = 0
+    self._alead_level_armed = False
+    self._alead_level_cooldown = 0
 
     self._dbg = ModifierDeltas()
     self._smoothed_speed_scale = 1.0
@@ -202,7 +220,7 @@ class FollowDistanceController:
 
     target = self._compute_target(v_ego, lead)
 
-    boost_target = self._dbg.alead_rate
+    boost_target = max(self._dbg.alead_rate, self._dbg.alead_level)
     boost_alpha = DT_MDL / (ALEAD_RATE_BOOST_TAU + DT_MDL)
     self._alead_rate_boost += boost_alpha * (boost_target - self._alead_rate_boost)
 
@@ -249,6 +267,10 @@ class FollowDistanceController:
     return self._dbg.atau
 
   @property
+  def dbg_alead_level_delta(self) -> float:
+    return self._dbg.alead_level
+
+  @property
   def dbg_flicker_delta(self) -> float:
     return self._dbg.flicker
 
@@ -267,6 +289,10 @@ class FollowDistanceController:
     self._alead_rate_ema = 0.0
     self._alead_rate_skip = 0
     self._alead_rate_boost = 0.0
+    self._alead_level_sustain = 0
+    self._alead_level_disarm = 0
+    self._alead_level_armed = False
+    self._alead_level_cooldown = 0
     self._dbg = ModifierDeltas()
 
   def _compute_target(self, v_ego: float, lead) -> float:
@@ -291,18 +317,20 @@ class FollowDistanceController:
     a_tau = float(lead.aLeadTau)
     v_rel = float(lead.vLead) - v_ego
     d_rel = float(lead.dRel)
+    m_prob = float(getattr(lead, 'modelProb', 1.0))
     status = bool(lead.status)
 
     self._update_history(a_lead, status, d_rel)
 
     self._dbg = ModifierDeltas(
-      jerk       = self._mod_jerk(),
-      cutin      = self._mod_cutin(),
-      closing    = self._mod_closing(v_rel),
-      alead      = self._mod_alead(a_lead, v_rel),
-      alead_rate = self._mod_alead_rate(a_lead),
-      atau       = self._mod_atau(a_tau, a_lead),
-      flicker    = self._mod_flicker(),
+      jerk        = self._mod_jerk(),
+      cutin       = self._mod_cutin(),
+      closing     = self._mod_closing(v_rel),
+      alead       = self._mod_alead(a_lead, v_rel),
+      alead_rate  = self._mod_alead_rate(a_lead),
+      alead_level = self._mod_alead_level(a_lead, v_rel, d_rel, m_prob, v_ego),
+      atau        = self._mod_atau(a_tau, a_lead),
+      flicker     = self._mod_flicker(),
     )
 
     self._prev_lead = status
@@ -325,6 +353,10 @@ class FollowDistanceController:
     self._alead_rate_ema = 0.0
     self._alead_rate_skip = 0
     self._alead_rate_boost = 0.0
+    self._alead_level_sustain = 0
+    self._alead_level_disarm = 0
+    self._alead_level_armed = False
+    self._alead_level_cooldown = 0
 
   def _update_history(self, a_lead: float, status: bool, d_rel: float):
     if self._alead_history:
@@ -414,6 +446,47 @@ class FollowDistanceController:
     span = ALEAD_RATE_FULL - ALEAD_RATE_DEADBAND
     scale = float(np.clip((self._alead_rate_ema - ALEAD_RATE_DEADBAND) / span, 0.0, 1.0))
     return ALEAD_RATE_DELTA * scale
+
+  def _mod_alead_level(self, a_lead: float, v_rel: float, d_rel: float,
+                       m_prob: float, v_ego: float) -> float:
+    sustain_frames = max(1, int(round(ALEAD_LEVEL_SUSTAIN_S / DT_MDL)))
+    disarm_frames = max(1, int(round(ALEAD_LEVEL_DISARM_S / DT_MDL)))
+    cooldown_frames = max(1, int(round(ALEAD_LEVEL_COOLDOWN_S / DT_MDL)))
+
+    gates_ok = (
+      v_rel < ALEAD_LEVEL_VREL_GATE
+      and m_prob >= ALEAD_LEVEL_MPROB
+      and ALEAD_LEVEL_DREL_MIN <= d_rel <= ALEAD_LEVEL_DREL_MAX
+      and v_ego >= ALEAD_LEVEL_VEGO_MIN
+    )
+
+    if not gates_ok:
+      self._alead_level_armed = False
+      self._alead_level_sustain = 0
+      self._alead_level_disarm = 0
+      return 0.0
+
+    if self._alead_level_cooldown > 0:
+      self._alead_level_cooldown -= 1
+      self._alead_level_sustain = 0
+      self._alead_level_disarm = 0
+      return 0.0
+
+    if a_lead <= ALEAD_LEVEL_THRESH:
+      self._alead_level_sustain = min(self._alead_level_sustain + 1, sustain_frames)
+      self._alead_level_disarm = 0
+      if self._alead_level_sustain >= sustain_frames:
+        self._alead_level_armed = True
+    elif a_lead >= ALEAD_LEVEL_DISARM:
+      self._alead_level_disarm = min(self._alead_level_disarm + 1, disarm_frames)
+      if not self._alead_level_armed:
+        self._alead_level_sustain = 0
+      if self._alead_level_armed and self._alead_level_disarm >= disarm_frames:
+        self._alead_level_armed = False
+        self._alead_level_cooldown = cooldown_frames
+        return 0.0
+
+    return ALEAD_LEVEL_DELTA if self._alead_level_armed else 0.0
 
   def _mod_atau(self, a_tau: float, a_lead: float) -> float:
     if a_lead >= ATAU_GATE_ALEAD:
