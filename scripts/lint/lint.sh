@@ -53,6 +53,7 @@ function run_tests() {
   run "check_shebang_scripts_are_executable" python3 -m pre_commit_hooks.check_shebang_scripts_are_executable $ALL_FILES
   run "check_shebang_format" $DIR/check_shebang_format.sh $ALL_FILES
   run "check_nomerge_comments" $DIR/check_nomerge_comments.sh $ALL_FILES
+  run "check_spviz_dist" $DIR/check_spviz_dist.sh
 
   if [[ -z "$FAST" ]]; then
     run "ty" ty check

@@ -94,6 +94,10 @@ def is_stock_model(started, params, CP: car.CarParams) -> bool:
 def mapd_ready(started: bool, params: Params, CP: car.CarParams) -> bool:
   return bool(os.path.exists(Paths.mapd_root()))
 
+
+def spviz_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return params.get_bool("SpViz")
+
 def uploader_ready(started: bool, params: Params, CP: car.CarParams) -> bool:
   if not params.get_bool("OnroadUploads"):
     return only_offroad(started, params, CP)
@@ -181,6 +185,9 @@ procs += [
 
   # locationd
   NativeProcess("locationd_llk", "sunnypilot/selfdrive/locationd", ["./locationd"], only_onroad),
+
+  # spviz: phone/browser dashboard webapp (port 8765)
+  PythonProcess("spviz", "sunnypilot.viz.bridge.server", and_(only_onroad, spviz_enabled)),
 ]
 
 if os.path.exists("./github_runner.sh"):

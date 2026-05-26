@@ -1192,6 +1192,10 @@
     "title": "[TIZI/TICI only] Display Turn Signals",
     "description": "When enabled, visual turn indicators are drawn on the HUD."
   },
+  "SpViz": {
+    "title": "sunnypilot viz (phone dashboard)",
+    "description": "Run lightweight WebSocket bridge on port 8765 exposing carState/modelV2/radar to a phone browser. Provides a Tesla-style 3D HUD (speed, gear, MADS, lanes, leads, speed limit). Connect a phone on the same Wi-Fi as the comma device and open http://<device-ip>:8765. Only runs when ignition is on."
+  },
   "SmartCruiseControlMap": {
     "title": "Smart Cruise Control - Map",
     "description": ""
