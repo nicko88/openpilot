@@ -122,6 +122,12 @@ class Plant:
     model.modelV2.acceleration = acceleration
     model.modelV2.meta.disengagePredictions.gasPressProbs = [float(prob_throttle) for _ in range(6)]
 
+    model_leads = model.modelV2.init('leadsV3', 3)
+    for ml in model_leads:
+      ml.prob = float(prob_lead) if status else 0.0
+      ml.x = [float(d_rel + v_lead * t) for t in ModelConstants.LEAD_T_IDXS]
+      ml.v = [float(v_lead)] * len(ModelConstants.LEAD_T_IDXS)
+
     control.controlsState.longControlState = LongCtrlState.pid if self.enabled else LongCtrlState.off
     ss.selfdriveState.experimentalMode = self.e2e
     ss.selfdriveState.personality = self.personality
