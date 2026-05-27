@@ -24,6 +24,8 @@ from openpilot.common.params import Params
 from cereal import car, log
 
 
+# /data/ is the persistent ext4 partition (sda12). ~ on this device resolves
+# to an overlay backed by /rwtmp tmpfs, which is wiped on reboot.
 BACKUP_DIR = "/data/torque_backups"
 
 
@@ -31,6 +33,7 @@ def _load_carparams():
   raw = Params().get("CarParams") or Params().get("CarParamsPrevRoute")
   if not raw:
     return None
+  # Convert to a dict so the reader can outlive the context manager
   with car.CarParams.from_bytes(raw) as cp:
     out = {
       "carFingerprint": cp.carFingerprint,
@@ -49,6 +52,7 @@ def _load_ltp():
   raw = Params().get("LiveTorqueParameters")
   if not raw:
     return None, None
+  # Snapshot all fields we need before the context manager exits
   with log.Event.from_bytes(raw) as evt:
     ltp = evt.liveTorqueParameters
     snap = {
@@ -67,11 +71,14 @@ def _load_ltp():
       "frictionCoefficientRaw": ltp.frictionCoefficientRaw,
       "num_points": len(ltp.points),
     }
+    # Speed-bin fields only exist if the new PR's capnp schema is applied
     try:
       snap["speedBinCenters"] = list(ltp.speedBinCenters)
       snap["speedBinLatAccelFactors"] = list(ltp.speedBinLatAccelFactors)
       snap["speedBinFrictions"] = list(ltp.speedBinFrictions)
       snap["speedBinValid"] = list(ltp.speedBinValid)
+      # Points are List(List(List(Float32))): outer=bins, then points, then [steer, lat_acc]
+      # Only populated on cache writes (~every 60s), empty between writes.
       raw_points = list(ltp.speedBinPoints)
       snap["speedBinPoints"] = [[list(pt) for pt in bin_pts] for bin_pts in raw_points]
       snap["speedBinHasPoints"] = len(raw_points) > 0
@@ -174,6 +181,7 @@ def _print_speed_bins(ltp) -> None:
   has_points = ltp["speedBinHasPoints"]
   points = ltp.get("speedBinPoints") or [[] for _ in centers]
 
+  # Pad points list to match centers length so per-bin iteration is safe
   while len(points) < len(centers):
     points.append([])
 
@@ -193,11 +201,17 @@ def _print_speed_bins(ltp) -> None:
     n_pts = per_bin_totals[i]
     print(f"  {i:>3}  {c:>8.2f}  {mph:>8.1f}  {l:>8.4f}  {f:>9.4f}  {n_pts:>7}  {mark:>7}")
 
+  # Sub-bucket breakdown — only meaningful if we actually have points stored.
+  # Cache was written with points; if grand_total is 0 the cache snapshot is
+  # between writes (or no driving yet).
   if grand_total == 0:
     print()
     print("  (no points stored in this cache snapshot — try again in ~60s)")
     return
 
+  # Steer torque sub-bucket bounds from selfdrive/locationd/torqued.py STEER_BUCKET_BOUNDS.
+  # The speed-bin learner scales the per-bucket minimums by 1/n_bins from
+  # RELAXED_MIN_BUCKET_POINTS = [1, 200, 300, 500, 500, 300, 200, 1].
   steer_bounds = [(-0.5, -0.3), (-0.3, -0.2), (-0.2, -0.1), (-0.1, 0.0),
                   (0.0, 0.1), (0.1, 0.2), (0.2, 0.3), (0.3, 0.5)]
   relaxed_base = [1, 200, 300, 500, 500, 300, 200, 1]
@@ -237,10 +251,12 @@ def _save_backup(raw: bytes, ltp) -> None:
   os.makedirs(BACKUP_DIR, exist_ok=True)
   ts = time.strftime("%Y%m%d_%H%M%S")
 
+  # Raw cereal blob (restorable as-is)
   raw_path = os.path.join(BACKUP_DIR, f"LiveTorqueParameters_{ts}.bytes")
   with open(raw_path, "wb") as f:
     f.write(raw)
 
+  # Human-readable JSON snapshot
   data: dict = {
     "captured_at": ts,
     "global": {

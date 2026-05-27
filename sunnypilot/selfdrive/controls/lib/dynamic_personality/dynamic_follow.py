@@ -16,7 +16,6 @@ from openpilot.common.realtime import DT_MDL
 
 
 LongPersonality = log.LongitudinalPersonality
-PERSONALITY_OPTIONS = [LongPersonality.relaxed, LongPersonality.standard, LongPersonality.aggressive]
 
 
 PERSONALITY_BASE  = {LongPersonality.relaxed: 1.85, LongPersonality.standard: 1.55, LongPersonality.aggressive: 1.30}
@@ -159,7 +158,6 @@ class FollowDistanceController:
 
     self._dbg = ModifierDeltas()
     self._smoothed_speed_scale = 1.0
-    self.dbg_speed_scale = 1.0
 
   def is_enabled(self) -> bool:
     return self._enabled
@@ -167,40 +165,6 @@ class FollowDistanceController:
   def set_enabled(self, enabled: bool):
     self._enabled = bool(enabled)
     self.params.put_bool('DynamicFollow', self._enabled)
-
-  def toggle(self) -> bool:
-    self.set_enabled(not self._enabled)
-    return self._enabled
-
-  @property
-  def personality(self) -> int:
-    return self._personality
-
-  def get_personality(self) -> int:
-    return int(self._personality)
-
-  def set_personality(self, personality: int):
-    if personality not in PERSONALITY_OPTIONS:
-      return
-    self._personality = personality
-    self.params.put('LongitudinalPersonality', personality)
-    self._cooldown = self._cooldown_frames
-    self._reset_history()
-
-  def cycle_personality(self) -> int:
-    idx = PERSONALITY_OPTIONS.index(self._personality) if self._personality in PERSONALITY_OPTIONS else 0
-    self.set_personality(PERSONALITY_OPTIONS[(idx + 1) % len(PERSONALITY_OPTIONS)])
-    return int(self._personality)
-
-  def reset(self):
-    self._personality = LongPersonality.standard
-    self.params.put('LongitudinalPersonality', LongPersonality.standard)
-    self._frame = 0
-    self._first = True
-    self._t_follow = PERSONALITY_BASE[LongPersonality.standard]
-    self._cooldown = 0
-    self._smoothed_speed_scale = 1.0
-    self._reset_history()
 
   def update(self):
     self._frame += 1
@@ -224,7 +188,6 @@ class FollowDistanceController:
     tau = SPEED_SCALE_RISE_TAU if target_scale >= self._smoothed_speed_scale else SPEED_SCALE_FALL_TAU
     alpha = DT_MDL / (tau + DT_MDL)
     self._smoothed_speed_scale += alpha * (target_scale - self._smoothed_speed_scale)
-    self.dbg_speed_scale = self._smoothed_speed_scale
 
     target = self._compute_target(v_ego, lead)
 
@@ -249,42 +212,6 @@ class FollowDistanceController:
       self._t_follow = float(np.clip(target, self._t_follow - step, self._t_follow + step))
 
     return float((self._t_follow + self._alead_rate_boost) * self._smoothed_speed_scale)
-
-  @property
-  def current_t_follow(self) -> float:
-    return self._t_follow
-
-  @property
-  def dbg_jerk_delta(self) -> float:
-    return self._dbg.jerk
-
-  @property
-  def dbg_cutin_delta(self) -> float:
-    return self._dbg.cutin
-
-  @property
-  def dbg_closing_delta(self) -> float:
-    return self._dbg.closing
-
-  @property
-  def dbg_alead_delta(self) -> float:
-    return self._dbg.alead
-
-  @property
-  def dbg_atau_delta(self) -> float:
-    return self._dbg.atau
-
-  @property
-  def dbg_alead_level_delta(self) -> float:
-    return self._dbg.alead_level
-
-  @property
-  def dbg_closing_boost_delta(self) -> float:
-    return self._dbg.closing_boost
-
-  @property
-  def dbg_flicker_delta(self) -> float:
-    return self._dbg.flicker
 
   def _reset_history(self):
     self._alead_history.clear()
@@ -319,6 +246,10 @@ class FollowDistanceController:
         self._last_lead_target = None
         self._dbg = ModifierDeltas()
         return float(np.clip(base, floor, ceil))
+      # Within grace: stale aLead from before the drop would make raw_rate spike
+      # on reacquire. Arm skip + clear prev so the rate anticipator restarts clean.
+      self._prev_alead_for_rate = None
+      self._alead_rate_skip = ALEAD_RATE_REACQUIRE_SKIP
       if self._last_lead_target is not None:
         return self._last_lead_target
       return float(np.clip(base, floor, ceil))

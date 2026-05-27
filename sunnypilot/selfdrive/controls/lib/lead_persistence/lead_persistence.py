@@ -91,10 +91,16 @@ class LeadPersistence:
     self._stability = 1.0
 
   def update(self, radarstate, force_enabled: bool = True) -> None:
-    if radarstate is None:
-      return
     if not force_enabled:
       self.reset()
+      return
+    if radarstate is None:
+      # radard daemon broken or service missing — decay held leads so we don't
+      # serve stale persistence forever while no fresh radar frames arrive.
+      if self._alive_one > 0:
+        self._alive_one -= 1
+      if self._alive_two > 0:
+        self._alive_two -= 1
       return
 
     one = radarstate.leadOne

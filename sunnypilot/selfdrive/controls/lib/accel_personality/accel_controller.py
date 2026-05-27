@@ -9,9 +9,9 @@ from cereal import custom
 import numpy as np
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.params import Params
+from openpilot.selfdrive.car.cruise import V_CRUISE_UNSET
 
 AccelPersonality = custom.LongitudinalPlanSP.AccelerationPersonality
-ACCEL_PERSONALITY_OPTIONS = [AccelPersonality.eco, AccelPersonality.normal, AccelPersonality.sport]
 
 
 A_MAX_BP = [0.0, 4.0, 8.0, 16.0, 40.0]
@@ -74,56 +74,22 @@ class AccelPersonalityController:
     self._cache_v_cruise = None
 
     if sm is not None:
-      try:
-        self._v_cruise = float(sm['carState'].vCruise) * (1000.0 / 3600.0)
-      except Exception:
-        pass
+      vc = sm['carState'].vCruise
+      self._v_cruise = float(vc) * (1000.0 / 3600.0) if vc != V_CRUISE_UNSET else 0.0
 
     if self.frame % PARAM_REFRESH_FRAMES == 0:
       val = self.params.get('AccelPersonality')
       self._personality = val if val is not None else AccelPersonality.normal
-      self._enabled = self.params.get_bool('AccelPersonalityEnabled')
-
-  @property
-  def accel_personality(self) -> int:
-    return self._personality
+      new_enabled = self.params.get_bool('AccelPersonalityEnabled')
+      if new_enabled and not self._enabled:
+        self._first = True
+      self._enabled = new_enabled
 
   def get_accel_personality(self) -> int:
     return int(self._personality)
 
-  def set_accel_personality(self, personality: int):
-    if personality in ACCEL_PERSONALITY_OPTIONS:
-      self._personality = personality
-      self.params.put('AccelPersonality', personality)
-
-  def cycle_accel_personality(self) -> int:
-    idx = ACCEL_PERSONALITY_OPTIONS.index(self._personality) if self._personality in ACCEL_PERSONALITY_OPTIONS else 0
-    nxt = ACCEL_PERSONALITY_OPTIONS[(idx + 1) % len(ACCEL_PERSONALITY_OPTIONS)]
-    self.set_accel_personality(nxt)
-    return int(nxt)
-
   def is_enabled(self) -> bool:
     return self._enabled
-
-  def set_enabled(self, enabled: bool):
-    self._enabled = bool(enabled)
-    self.params.put_bool('AccelPersonalityEnabled', self._enabled)
-
-  def toggle_enabled(self) -> bool:
-    self.set_enabled(not self._enabled)
-    return self._enabled
-
-  def reset(self, personality: int | None = None):
-    if personality is None or personality not in ACCEL_PERSONALITY_OPTIONS:
-      personality = AccelPersonality.normal
-    self._personality = personality
-    self.params.put('AccelPersonality', self._personality)
-    self.frame = 0
-    self._first = True
-    self._a_min = -0.05
-    self._a_max = 1.50
-    self._cache_v = None
-    self._cache_v_cruise = None
 
   def get_accel_limits(self, v_ego: float) -> tuple[float, float]:
     v_ego = max(0.0, v_ego)

@@ -146,3 +146,26 @@ class TestLeadPersistence:
     lp.update(raw_off)
     out = lp.smooth(raw_off)
     assert out.leadOne.status is False
+
+  def test_none_radarstate_decays_held_lead(self):
+    """If radard daemon stops publishing, we must not serve a stale lead
+    forever — the alive counters should decay frame by frame until expiry."""
+    lp = _make()
+    raw_on = FakeRadarState(lead_one=FakeLead(status=True, d_rel=30.0))
+    for _ in range(5):
+      lp.update(raw_on)
+    assert lp._alive_one == _HOLD_FRAMES
+
+    for i in range(_HOLD_FRAMES):
+      lp.update(None)
+      assert lp._alive_one == _HOLD_FRAMES - (i + 1)
+    assert lp._alive_one == 0
+
+  def test_disabled_clears_state_even_when_radarstate_none(self):
+    lp = _make()
+    raw_on = FakeRadarState(lead_one=FakeLead(status=True, d_rel=30.0))
+    for _ in range(5):
+      lp.update(raw_on)
+    lp.update(None, force_enabled=False)
+    assert lp._alive_one == 0
+    assert lp._last_one is None

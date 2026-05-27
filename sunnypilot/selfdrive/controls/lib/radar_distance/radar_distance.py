@@ -89,10 +89,6 @@ class RadarDistanceController:
     self._enabled = bool(enabled)
     self.params.put_bool('RadarDistance', self._enabled)
 
-  def toggle(self) -> bool:
-    self.set_enabled(not self._enabled)
-    return self._enabled
-
   def update(self, sm=None, sm_sp=None) -> None:
     self._frame += 1
     if self._frame % _PARAM_REFRESH_FRAMES == 0:
@@ -130,12 +126,6 @@ class RadarDistanceController:
     if not self._enabled:
       return radarstate
     return self._lead_persistence.smooth(radarstate, force_enabled=True)
-
-  def reset(self) -> None:
-    self._state = FarLeadState()
-    self._track_persistence.clear()
-    self._ceiling = _A_CEIL_RELEASED
-    self._first = True
 
   def get_accel_ceiling(self, v_ego: float) -> float | None:
     if not self._enabled or not self._state.active:
@@ -260,8 +250,7 @@ class RadarDistanceController:
       return _A_CEIL_COAST + t * closing * (_A_CEIL_BRAKE - _A_CEIL_COAST)
     return _A_CEIL_RELEASED
 
-  def _step_ceiling(self) -> None:
-    target = self._target_ceiling()
+  def _ramp_ceiling_toward(self, target: float) -> None:
     if self._first:
       self._ceiling = target
       self._first = False
@@ -269,6 +258,9 @@ class RadarDistanceController:
     rate = _A_CEIL_RATE_DOWN if target < self._ceiling else _A_CEIL_RATE_UP
     step = rate * DT_MDL
     self._ceiling = float(np.clip(target, self._ceiling - step, self._ceiling + step))
+
+  def _step_ceiling(self) -> None:
+    self._ramp_ceiling_toward(self._target_ceiling())
 
   def _release(self) -> None:
     self._track_persistence.clear()
@@ -279,10 +271,4 @@ class RadarDistanceController:
       self._state.active = False
       self._state.ttc = float('inf')
       self._state.track_id = -1
-    target = _A_CEIL_RELEASED
-    if self._first:
-      self._ceiling = target
-      self._first = False
-      return
-    step = _A_CEIL_RATE_UP * DT_MDL
-    self._ceiling = float(np.clip(target, self._ceiling - step, self._ceiling + step))
+    self._ramp_ceiling_toward(_A_CEIL_RELEASED)

@@ -154,3 +154,23 @@ class TestAleadRateAnticipator:
       df.update()
       df.get_follow_distance_multiplier(15.0, None)
     assert df._alead_rate_boost == 0.0
+
+  def test_brief_lead_loss_in_grace_clears_rate_prev(self):
+    """Lead-drop within the grace window should clear _prev_alead_for_rate
+    and arm the reacquire skip so the next reacquisition does not spike the
+    raw rate from a stale aLead snapshot."""
+    df = _make()
+    df.update()
+    # warm lead with stable a_lead
+    for _ in range(10):
+      rs = FakeRadarState(FakeLead(a_lead=-0.2))
+      df.update()
+      df.get_follow_distance_multiplier(20.0, rs)
+    assert df._prev_alead_for_rate is not None
+
+    # brief drop, still inside grace window
+    for _ in range(3):
+      df.update()
+      df.get_follow_distance_multiplier(20.0, None)
+    assert df._prev_alead_for_rate is None
+    assert df._alead_rate_skip == 3
